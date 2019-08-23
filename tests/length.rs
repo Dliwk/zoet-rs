@@ -1,4 +1,4 @@
-use core::fmt;
+use core::{cmp::Ordering, fmt};
 use zoet::zoet;
 
 #[derive(Copy)]
@@ -72,13 +72,22 @@ impl Length {
     //     self.0.cmp(&other.0)
     // }
 
+    // test ordering, PartialOrd-style.
     #[zoet(PartialOrd)]
-    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
-        self.0.partial_cmp(&other.0)
-    }
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> { self.0.partial_cmp(&other.0) }
 
     #[zoet(Default)]
     fn default() -> Self { Self(0.0) }
+}
+
+#[derive(PartialEq, Eq)]
+struct IntLength(i64);
+
+#[zoet]
+impl IntLength {
+    // Test orderign, Ord-style.
+    #[zoet(Ord, PartialOrd)]
+    fn partial_cmp(&self, other: &Self) -> Ordering { self.0.cmp(&other.0) }
 }
 
 fn main() {

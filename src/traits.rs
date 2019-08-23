@@ -20,8 +20,8 @@ pub static TRAIT_FNS: phf::Map<&str, GenFn> = phf::phf_map! {
     // std::cmp
     "Ord" => |f| ord_shaped(f, &pq!(::core::cmp::Ord), &pq!(cmp)),
     "PartialEq" => |f| ord_shaped(f, &pq!(::core::cmp::PartialEq), &pq!(eq)),
-    "PartialOrd" =>|f| ord_shaped(f, &pq!(::core::cmp::PartialOrd), &pq!(partial_cmp)),
-    
+    "PartialOrd" => partial_ord,
+
     // std::convert
     "AsMut" => |f| borrow_mut_shaped(f, &pq!(::core::convert::AsMut), &pq!(as_mut)),
     "AsRef" => |f| borrow_shaped(f, &pq!(::core::convert::AsRef), &pq!(as_ref)),
@@ -203,6 +203,50 @@ fn ord_shaped(func: GenIn, trait_name: &Path, method_name: &Ident) -> Result<Tok
         }
 
     })
+}
+
+fn partial_ord(func: GenIn) -> Result<TokenStream> {
+    let filtered = func.ref_param(0)?.ref_param(1)?.binary()?;
+
+    if let Ok(FunctionArgs {
+        input: (ref lhs, ref rhs),
+        ref output,
+        meta: FunctionMeta { item_span, generics, to_call, .. },
+    }) = filtered.clone().option_return()
+    {
+        // The function returns Option<_>, so is assumed to be compatible with
+        // PartialOrd::partial_ord.
+        let where_clause = &generics.where_clause;
+        Ok(quote_spanned! {
+            *item_span =>
+
+            impl #generics ::core::cmp::PartialOrd for #lhs #where_clause {
+                fn partial_cmp(&self, other: &#rhs) -> ::core::option::Option<#output> {
+                    #to_call(self, other)
+                }
+            }
+
+        })
+    } else {
+        let FunctionArgs {
+            input: (ref lhs, ref rhs),
+            ref output,
+            meta: FunctionMeta { item_span, generics, to_call, .. },
+        } = filtered.has_return()?;
+        // The function does *not* return Option<_>, so we assume that its return value needs to be
+        // wrapped.
+        let where_clause = &generics.where_clause;
+        Ok(quote_spanned! {
+            *item_span =>
+
+            impl #generics ::core::cmp::PartialOrd for #lhs #where_clause {
+                fn partial_cmp(&self, other: &#rhs) -> ::core::option::Option<#output> {
+                    ::core::option::Option::Some(#to_call(self, other))
+                }
+            }
+
+        })
+    }
 }
 
 /// `fn(A) -> T` ⇛ `impl Trait<A> for T { fn op(A) -> T }`
