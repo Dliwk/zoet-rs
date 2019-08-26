@@ -12,7 +12,7 @@ use proc_macro2::{Span, TokenStream};
 use quote::ToTokens;
 use std::borrow::Cow::{self, Borrowed, Owned};
 use syn::{
-    GenericArgument, Generics, PathArguments, PathSegment, ReturnType, Type, TypePath,
+    GenericArgument, Generics, Ident, PathArguments, PathSegment, ReturnType, Type, TypePath,
     TypeReference,
 };
 
@@ -92,45 +92,43 @@ fn try_mut<'a>(ty: &'a WithTokens<'a, Type>, name: &str) -> Result<Type> {
     }
 }
 
-fn try_param_type<'a>(
-    ty: &'a WithTokens<'a, Type>,
-    required_type: &str,
-    position_name: &str,
-) -> Result<Vec<Type>>
-{
+fn try_param_type<'a>(ty: &'a WithTokens<'a, Type>) -> Result<Option<(&'a Ident, Box<[Type]>)>> {
     if let Type::Path(TypePath { qself: None, path }) = &ty.value {
         let last = path.segments.last().expect("TypePath::path is always nonempty");
         if let PathSegment { ident, arguments: PathArguments::AngleBracketed(abga) } = last.value()
         {
-            if ident == required_type {
-                let args: Result<Vec<Type>> = abga
-                    .args
-                    .iter()
-                    .map(|arg| match arg {
-                        GenericArgument::Type(ty) => Ok(ty.clone()),
-                        _ => Error::err("this generic parameter must be a type", arg),
-                    })
-                    .collect();
-                return args;
-            }
+            let args = abga
+                .args
+                .iter()
+                .map(|arg| match arg {
+                    GenericArgument::Type(ty) => Ok(ty.clone()),
+                    _ => Error::err("this generic parameter must be a type", arg),
+                })
+                .collect::<Result<_>>()?;
+            return Ok(Some((ident, args)));
         }
     }
-    Error::err(format!("{} type must be `{}<...>`", position_name, required_type), ty.to_tokens)
+    Ok(None)
+    //Error::err(format!("{} type must be `{}<...>`", position_name, required_type), ty.to_tokens)
 }
 
 fn try_result<'a>(ty: &'a WithTokens<'a, Type>, name: &str) -> Result<(Type, Option<Type>)> {
-    try_param_type(ty, "Result", name).and_then(|types| match types.as_slice() {
-        [a] => Ok((a.clone(), None)),
-        [a, b] => Ok((a.clone(), Some(b.clone()))),
-        _ => Error::err("`Result` must have one or two type parameters", ty),
-    })
+    match try_param_type(ty)? {
+        Some((ident, box [ref a, ref b])) if ident == "Result" => Ok((a.clone(), Some(b.clone()))),
+        Some((ident, box [ref a])) if ident == "Result" || ident == "Fallible" =>
+            Ok((a.clone(), None)),
+        _ => Error::err(
+            format!("{} type must be `Result<_>`, `Result<_,_>` or `Fallible<_>`", name),
+            ty.to_tokens,
+        ),
+    }
 }
 
 fn try_option<'a>(ty: &'a WithTokens<'a, Type>, name: &str) -> Result<Type> {
-    try_param_type(ty, "Option", name).and_then(|types| match types.as_slice() {
-        [a] => Ok(a.clone()),
-        _ => Error::err("`Option` must have one type parameter", ty),
-    })
+    match try_param_type(ty)? {
+        Some((ident, box [ref a])) if ident == "Option" => Ok(a.clone()),
+        _ => Error::err(format!("{} type must be `Option<_>`", name), ty.to_tokens),
+    }
 }
 
 impl<'a, O> FunctionArgs<'a, Cow<'a, [WithTokens<'a, Type>]>, O> {

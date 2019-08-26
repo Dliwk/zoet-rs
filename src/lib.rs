@@ -14,9 +14,10 @@ rather than generating traits based on the contents of a struct, it generates th
 individual functions/methods. An example works better than a textual description ever would:
 
 ```
+use core::cmp::Ordering;
 use zoet::zoet;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct Length(usize);
 #[zoet]
 impl Length {
@@ -36,7 +37,7 @@ impl Length {
     fn add_assign(&mut self, rhs: Self) { self.0 += rhs.0; }
 
     #[zoet(Ord, PartialOrd)]  // you get the idea by now
-    fn ord(&self, other: &Self) { self.0.cmp(&other.0) }
+    fn ord(&self, other: &Self) -> Ordering { self.0.cmp(&other.0) }
 }
 
 let mut v = Length::default();
@@ -76,6 +77,14 @@ however there are a couple of special cases which reduce boilerplate further:
   implement both with the same function and avoid order-related bugs.
 * `Add` etc. can be applied to an `AddAssign`-shaped function, in which case it generates a trivial
   implementation which mutates its `mut self` and returns it.
+
+Because macros run before type checking, they only knows the _names_ of the types, and not the
+actual types. `zoet` prefers to be liberal and pass through types rather than attempt to parse
+them, but we need to unpick the result type used by some traits such as `TryInto` into the success
+and error types, or rather, the _names_ of the success and error types. As such, it expects the
+result type to be called (or be a path ending in) `Result` or `Fallible`, and if the second
+parameter is missing, the identifier `Error` is used. Idiomatic Rust code shouldn't have a problem
+with this, but if you have unusual error-handling, you may trip over this.
 
 However, while this macro makes it easy to stamp out loads of core traits, don't go crazy but
 consider each trait you add and whether there is a more suitable macro to do the job. The example
