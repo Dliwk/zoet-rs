@@ -171,15 +171,6 @@ pub(crate) mod traits;
 pub(crate) mod with_tokens;
 pub(crate) mod zoet;
 
-pub(crate) mod preamble {
-    pub(crate) use crate::{
-        error::{Error, Result},
-        function_args::{FunctionArgs, FunctionMeta},
-        self_replacer::SelfReplacer,
-        with_tokens::WithTokens,
-    };
-}
-
 use quote::ToTokens;
 
 /// The `#[zoet]` macro.

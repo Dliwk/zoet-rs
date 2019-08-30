@@ -1,7 +1,7 @@
-use crate::preamble::*;
+use crate::error::*;
+use quote::quote_spanned;
 use syn::{
-    fold::*, spanned::Spanned, ArgCaptured, ArgSelf, ArgSelfRef, FnArg, Ident, Pat, PatIdent,
-    PatStruct, PatTupleStruct, Token, Type, TypePath, TypeReference,
+    fold::*, parse2, spanned::Spanned, FnArg, PatStruct, PatTupleStruct, Receiver, Type, TypePath,
 };
 
 pub struct SelfReplacer<'a> {
@@ -39,7 +39,10 @@ impl<'a> SelfReplacer<'a> {
 impl Fold for SelfReplacer<'_> {
     fn fold_type(&mut self, i: Type) -> Type {
         match i {
-            Type::Path(ref path) if path.path.is_ident("Self") => self.self_ty.clone(),
+            Type::Path(ref path) if path.path.is_ident("Self") => {
+                let ty: Type = self.self_ty.clone();
+                ty
+            }
             _ => fold_type(self, i),
         }
     }
@@ -99,37 +102,22 @@ impl Fold for SelfReplacer<'_> {
 
     fn fold_fn_arg(&mut self, i: FnArg) -> FnArg {
         let span = i.span();
+        let self_ty = self.self_ty.clone();
 
-        match i {
-            FnArg::SelfValue(ArgSelf { mutability, .. }) => FnArg::Captured(ArgCaptured {
-                pat: Pat::Ident(PatIdent {
-                    by_ref: None,
-                    mutability,
-                    ident: Ident::new("self", span),
-                    subpat: None,
-                }),
-                colon_token: Token![:](span),
-                ty: self.self_ty.clone(),
-            }),
-
-            FnArg::SelfRef(ArgSelfRef { ref lifetime, mutability, .. }) =>
-                FnArg::Captured(ArgCaptured {
-                    pat: Pat::Ident(PatIdent {
-                        by_ref: None,
-                        mutability: None,
-                        ident: Ident::new("self", span),
-                        subpat: None,
-                    }),
-                    colon_token: Token![:](span),
-                    ty: Type::Reference(TypeReference {
-                        and_token: Token![&](span),
-                        lifetime: lifetime.clone(),
-                        mutability,
-                        elem: Box::new(self.self_ty.clone()),
-                    }),
-                }),
-
-            _ => fold_fn_arg(self, i),
+        if let FnArg::Receiver(receiver) = &i {
+            match receiver {
+                Receiver { attrs, reference: None, .. } =>
+                    parse2::<FnArg>(quote_spanned!( span => #(#attrs)* self: #self_ty ))
+                        .expect("Mis-interpolated quote!(); please report a bug"),
+                Receiver { attrs, reference: Some((and, lifetime)), mutability, .. } => parse2::<
+                    FnArg,
+                >(
+                    quote_spanned!( span => #(#attrs)* self: #and #lifetime #mutability #self_ty ),
+                )
+                .expect("Mis-interpolated quote!(); please report a bug"),
+            }
+        } else {
+            fold_fn_arg(self, i)
         }
     }
 

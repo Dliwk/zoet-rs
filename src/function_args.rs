@@ -6,7 +6,7 @@
 //! a pipeline, starting with the relatively raw `syn` nodes and ultimately producing simple types
 //! which can be easily slotted into the `quote!` macro.
 
-use crate::preamble::*;
+use crate::{error::*, with_tokens::*};
 use core::convert::TryFrom;
 use proc_macro2::{Span, TokenStream};
 use quote::ToTokens;
@@ -95,8 +95,7 @@ fn try_mut<'a>(ty: &'a WithTokens<'a, Type>, name: &str) -> Result<Type> {
 fn try_param_type<'a>(ty: &'a WithTokens<'a, Type>) -> Result<Option<(&'a Ident, Box<[Type]>)>> {
     if let Type::Path(TypePath { qself: None, path }) = &ty.value {
         let last = path.segments.last().expect("TypePath::path is always nonempty");
-        if let PathSegment { ident, arguments: PathArguments::AngleBracketed(abga) } = last.value()
-        {
+        if let PathSegment { ident, arguments: PathArguments::AngleBracketed(abga) } = last {
             let args = abga
                 .args
                 .iter()

@@ -1,48 +1,46 @@
 use crate::{
     error::{Error, Result, ResultExt},
-    function_args::{FunctionArgs, FunctionMeta},
-    traits::{GenFn, TRAIT_FNS},
-    with_tokens::WithTokens,
+    function_args::*,
+    traits::*,
+    with_tokens::*,
 };
 use proc_macro2::TokenStream;
 use quote::{quote, ToTokens};
 use std::borrow::Cow;
 use syn::{
-    parse::{ParseStream, Parser},
-    parse2,
-    punctuated::Punctuated,
-    spanned::Spanned,
-    token, FnDecl, ImplItem, Item, ItemFn, ItemImpl, Meta, *,
+    parse::Parser, parse2, punctuated::Punctuated, spanned::Spanned, token, ImplItem, Item, ItemFn,
+    ItemImpl, Meta, *,
 };
 
-fn zoet_free_fn(attr: &TokenStream, item_fn: &ItemFn) -> Result<TokenStream> {
+fn zoet_free_fn(attr: &TokenStream, item_fn: ItemFn) -> Result<TokenStream> {
+    let parser = <Punctuated<NestedMeta, token::Comma>>::parse_terminated;
+    let attr = parser.parse2(attr.clone()).context("can't parse this attribute", attr)?;
+
     let mut tokens = TokenStream::new();
 
-    let to_call = &item_fn.ident.clone().into_token_stream();
-
-    let fn_decl = &item_fn.decl;
+    let sig = &item_fn.sig;
+    let to_call = &sig.ident.clone().into_token_stream();
 
     let meta = FunctionMeta {
         item_span: item_fn.span(),
-        ident_to_tokens: &item_fn.ident,
+        ident_to_tokens: &sig.ident,
         to_call,
-        generics: &fn_decl.generics,
+        generics: &sig.generics,
     };
 
-    let input = fn_decl
+    let input = sig
         .inputs
         .iter()
         .map(|fn_arg| WithTokens::from_fn_arg(fn_arg, None))
         .collect::<Result<Cow<_>>>()?;
 
-    let parser = <Punctuated<Meta, token::Comma>>::parse_terminated;
-    let attr_trait_fns = trait_fns(parser, attr, attr)?;
+    let attr_trait_fns = trait_fns(&attr)?;
 
     for attr_trait_fn in attr_trait_fns {
         let attr_trait_fn = attr_trait_fn?;
         let args = FunctionArgs {
             input: Cow::clone(&input),
-            output: WithTokens::from_return_type(&fn_decl.output, None)?,
+            output: WithTokens::from_return_type(&sig.output, None)?,
             meta: &meta,
         };
         let trait_tokens = attr_trait_fn(args)?;
@@ -87,36 +85,37 @@ fn zoet_inherent_impl(attr: &TokenStream, mut item_impl: ItemImpl) -> Result<Tok
                 // TODO: this is very similar to fn-parsing in zoet_free_fn. Consider
                 // refactoring.
 
-                let method_ident = &method.sig.ident;
+                let sig = &method.sig;
+                let method_ident = &sig.ident;
                 let self_ty = &item_impl.self_ty;
                 let to_call = &quote! { < #self_ty > :: #method_ident };
-                let fn_decl = &method.sig.decl;
 
                 let meta = FunctionMeta {
                     item_span: method.span(),
                     ident_to_tokens: &method.sig.ident,
                     to_call,
-                    generics: &merge_generics(item_impl.generics.clone(), &fn_decl.generics),
+                    generics: &merge_generics(item_impl.generics.clone(), &sig.generics),
                 };
 
-                let input = fn_decl
+                let input = sig
                     .inputs
                     .iter()
                     .map(|fn_arg| WithTokens::from_fn_arg(fn_arg, Some(self_ty)))
                     .collect::<Result<Cow<_>>>()?;
 
-                let parser = |input: ParseStream| -> syn::Result<_> {
-                    let content;
-                    parenthesized!(content in input);
-                    <Punctuated<Meta, token::Comma>>::parse_terminated(&content)
+                let attr = attr.parse_meta().context("can't parse attribute", attr)?;
+                let attr = match attr {
+                    Meta::List(meta_list) => meta_list.nested,
+                    _ => return Error::err("expected a parenthesised list", attr)?,
                 };
-                let attr_trait_fns = trait_fns(parser, &attr.tts, &attr)?;
+
+                let attr_trait_fns = trait_fns(&attr)?;
 
                 for attr_trait_fn in attr_trait_fns {
                     let attr_trait_fn = attr_trait_fn?;
                     let args = FunctionArgs {
                         input: Cow::clone(&input),
-                        output: WithTokens::from_return_type(&fn_decl.output, Some(self_ty))?,
+                        output: WithTokens::from_return_type(&sig.output, Some(self_ty))?,
                         meta: &meta,
                     };
                     let trait_tokens = attr_trait_fn(args)?;
@@ -130,25 +129,28 @@ fn zoet_inherent_impl(attr: &TokenStream, mut item_impl: ItemImpl) -> Result<Tok
     Ok(tokens)
 }
 
-fn trait_fns<P>(
-    parser: impl Parser<Output = Punctuated<Meta, P>>,
-    attr: &TokenStream,
-    to_tokens: &dyn ToTokens,
-) -> Result<impl Iterator<Item = Result<&'static GenFn>>>
-{
-    if attr.is_empty() {
-        return Error::err("attribute should contain a trait or list of traits", to_tokens);
+fn trait_fns<'a>(
+    nested_metas: &'a Punctuated<NestedMeta, Token![,]>,
+) -> Result<impl Iterator<Item = Result<&'static GenFn>> + 'a> {
+    if nested_metas.is_empty() {
+        return Error::err("attribute ought to contain a trait or list of traits", nested_metas);
     }
 
-    parser.parse2(attr.clone()).context("cannot parse attribute", attr).map(|punctuated| {
-        punctuated.into_iter().map(|attr_arg| match attr_arg {
-            Meta::Word(ident) => TRAIT_FNS
-                .get(ident.to_string().as_str())
-                .context("this is not a known trait name", ident),
+    Ok(nested_metas.iter().map(|nested_meta| match nested_meta {
+        NestedMeta::Lit(lit) => Error::err("literals are not valid here", lit),
+        NestedMeta::Meta(meta) => match meta {
             Meta::List(value) => Error::err("this does not take parameters", value),
             Meta::NameValue(value) => Error::err("this does not take a parameter", value),
-        })
-    })
+            Meta::Path(value) => value
+                .get_ident()
+                .ok_or_else(|| Error::new("this is not a valid trait name", value))
+                .and_then(|ident| {
+                    TRAIT_FNS
+                        .get(ident.to_string().as_str())
+                        .context("this is not a known trait name", ident)
+                }),
+        },
+    }))
 }
 
 pub fn zoet(attr: &TokenStream, item: TokenStream) -> Result<TokenStream> {
@@ -167,12 +169,14 @@ pub fn zoet(attr: &TokenStream, item: TokenStream) -> Result<TokenStream> {
     let item = parse2::<Item>(item.clone()).context("this is not an item", item)?;
 
     match item {
-        Item::Fn(ref item_fn) => match item_fn.decl.as_ref() {
-            FnDecl { variadic: None, .. } => zoet_free_fn(attr, item_fn),
-            _ => Error::err("cannot apply to this function", &item_fn),
+        Item::Fn(item_fn) => match item_fn {
+            ItemFn { sig: Signature { variadic: None, .. }, .. } => zoet_free_fn(attr, item_fn),
+            _ => Error::err("cannot apply to this function", item_fn),
         },
-        Item::Impl(item_impl @ ItemImpl { trait_: None, .. }) =>
-            zoet_inherent_impl(attr, item_impl),
-        item => Error::err("cannot apply to this item", item),
+        Item::Impl(item_impl) => match item_impl {
+            ItemImpl { trait_: None, .. } => zoet_inherent_impl(attr, item_impl),
+            _ => Error::err("cannot apply to this impl", item_impl),
+        },
+        item => Error::err("cannot apply to this type of item", item),
     }
 }
