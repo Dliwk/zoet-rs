@@ -3,7 +3,8 @@
 /// When transforming data, we sometimes want to keep track of the original source in case we need
 /// to report an error. For example, when parsing a function signature, we may want to highlight
 /// the `foo: &Foo` in the error message, but the actual value we want to work on is the `Foo`.
-use crate::preamble::*;
+use crate::error::*;
+use crate::self_replacer::*;
 use core::{fmt, ops::Deref};
 use proc_macro2::TokenStream;
 use quote::ToTokens;
@@ -36,7 +37,7 @@ impl<T: fmt::Debug> fmt::Debug for WithTokens<'_, T> {
     }
 }
 impl<'a, T> WithTokens<'a, T> {
-    //fn new(value: T, to_tokens: &'a dyn ToTokens) -> Self { Self { value, to_tokens } }
+    // fn new(value: T, to_tokens: &'a dyn ToTokens) -> Self { Self { value, to_tokens } }
 
     #[must_use = "This returns a new object with updated values. Were you expecting a mutator?"]
     pub fn with_value<U>(&self, value: U) -> WithTokens<'a, U> {
@@ -51,10 +52,8 @@ impl<'a, T> WithTokens<'a, T> {
 
 impl<'a> WithTokens<'a, &'a ReturnType> {
     pub fn from_return_type(
-        return_type: &'a ReturnType,
-        self_ty: Option<&'a Type>,
-    ) -> Result<WithTokens<'a, ReturnType>>
-    {
+        return_type: &'a ReturnType, self_ty: Option<&'a Type>,
+    ) -> Result<WithTokens<'a, ReturnType>> {
         let to_tokens = return_type;
         let mut return_type = return_type.clone();
 
@@ -69,10 +68,8 @@ impl<'a> WithTokens<'a, &'a ReturnType> {
 
 impl<'a> WithTokens<'a, Type> {
     pub fn from_fn_arg(
-        fn_arg: &'a FnArg,
-        self_ty: Option<&'a Type>,
-    ) -> Result<WithTokens<'a, Type>>
-    {
+        fn_arg: &'a FnArg, self_ty: Option<&'a Type>,
+    ) -> Result<WithTokens<'a, Type>> {
         let to_tokens = fn_arg;
         let mut fn_arg = fn_arg.clone();
 
@@ -81,12 +78,11 @@ impl<'a> WithTokens<'a, Type> {
         }
 
         match fn_arg {
-            FnArg::Captured(fn_arg) => Ok(WithTokens { to_tokens, value: fn_arg.ty }),
-            FnArg::SelfValue(_) | FnArg::SelfRef(_) => Error::err(
+            FnArg::Typed(pat_type) => Ok(WithTokens { to_tokens, value: *(pat_type.ty) }),
+            FnArg::Receiver(_) => Error::err(
                 "unexpected `self`: did you forget to add #[zoet] to this method's impl?",
                 fn_arg,
             ),
-            _ => Error::err("cannot handle this parameter", fn_arg),
         }
     }
 }

@@ -95,7 +95,7 @@ fn append_error(tokens: &mut TokenStream, message: &str, span: &SpanPair) {
 
 impl ToTokens for Error {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        //let mut error: String = self.to_string();
+        // let mut error: String = self.to_string();
         // let mut err: &dyn StdError = self;
         // while let Some(source) = err.source() {
         //     error.push_str("\ncontext: ");
@@ -105,9 +105,9 @@ impl ToTokens for Error {
         // //if let Some(backtrace) = self.backtrace() {
         //     //append_error(tokens, &backtrace.to_string(), None, None);
         // //}
-        //append_error(tokens, &error)
+        // append_error(tokens, &error)
         append_error(tokens, &format!("#[zoet]: {}", self.message), &self.span);
 
-        //append_error(tokens, &format!("DEBUG: {:?}", &self.span.token_stream), &self.span);
+        // append_error(tokens, &format!("DEBUG: {:?}", &self.span.token_stream), &self.span);
     }
 }

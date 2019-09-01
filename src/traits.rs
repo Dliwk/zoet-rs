@@ -1,4 +1,4 @@
-use crate::preamble::*;
+use crate::{error::*, function_args::*, with_tokens::*};
 use proc_macro2::TokenStream;
 use quote::quote_spanned;
 use std::borrow::Cow;
@@ -8,98 +8,106 @@ pub type GenIn<'a> = FunctionArgs<'a, Cow<'a, [WithTokens<'a, Type>]>, WithToken
 pub type GenOut = Result<TokenStream>;
 pub type GenFn = fn(GenIn) -> GenOut;
 
-pub static TRAIT_FNS: phf::Map<&str, GenFn> = phf::phf_map! {
-    // std::borrow
-    "Borrow" => |f| borrow_shaped(f, &pq!(::core::borrow::Borrow), &pq!(borrow)),
-    "BorrowMut" => |f| borrow_mut_shaped(f, &pq!(::core::borrow::BorrowMut), &pq!(borrow_mut)),
-    "ToOwned" => to_owned,
+pub(crate) fn get_trait_fn(key: &str) -> Option<GenFn> {
+    let func: GenFn = match key {
+        // std::borrow
+        "Borrow" => |f| borrow_shaped(f, &pq!(::core::borrow::Borrow), &pq!(borrow)),
+        "BorrowMut" => |f| borrow_mut_shaped(f, &pq!(::core::borrow::BorrowMut), &pq!(borrow_mut)),
+        "ToOwned" => to_owned,
 
-    // std::clone
-    "Clone" => clone,
+        // std::clone
+        "Clone" => clone,
 
-    // std::cmp
-    "Ord" => |f| ord_shaped(f, &pq!(::core::cmp::Ord), &pq!(cmp)),
-    "PartialEq" => |f| ord_shaped(f, &pq!(::core::cmp::PartialEq), &pq!(eq)),
-    "PartialOrd" => partial_ord,
+        // std::cmp
+        "Ord" => |f| ord_shaped(f, &pq!(::core::cmp::Ord), &pq!(cmp)),
+        "PartialEq" => |f| ord_shaped(f, &pq!(::core::cmp::PartialEq), &pq!(eq)),
+        "PartialOrd" => partial_ord,
 
-    // std::convert
-    "AsMut" => |f| borrow_mut_shaped(f, &pq!(::core::convert::AsMut), &pq!(as_mut)),
-    "AsRef" => |f| borrow_shaped(f, &pq!(::core::convert::AsRef), &pq!(as_ref)),
-    "From" => from,
-    "Into" => into,
-    "TryFrom" => try_from,
-    "TryInto" => try_into,
+        // std::convert
+        "AsMut" => |f| borrow_mut_shaped(f, &pq!(::core::convert::AsMut), &pq!(as_mut)),
+        "AsRef" => |f| borrow_shaped(f, &pq!(::core::convert::AsRef), &pq!(as_ref)),
+        "From" => from,
+        "Into" => into,
+        "TryFrom" => try_from,
+        "TryInto" => try_into,
 
-    // std::default
-    "Default" => default,
+        // std::default
+        "Default" => default,
 
-    // std::error
-    // "Error" => generate Error::source?
+        // std::error
+        // "Error" => generate Error::source?
 
-    // std::fmt
-    // Probably silly to do Binary/LowerExp/LowerHex etc.
-    "Debug" => |f| debug_shaped(f, &pq!(::core::fmt::Debug)),
-    "Display" => |f| debug_shaped(f, &pq!(::core::fmt::Display)),
-    "Write" => write,
+        // std::fmt
+        // Probably silly to do Binary/LowerExp/LowerHex etc.
+        "Debug" => |f| debug_shaped(f, &pq!(::core::fmt::Debug)),
+        "Display" => |f| debug_shaped(f, &pq!(::core::fmt::Display)),
+        "Write" => write,
 
-    // std::future
-    // "Future" => generate Future::poll?
+        // std::future
+        // "Future" => generate Future::poll?
 
-    // std::hash
-    // "BuildHasher"?
-    // "Hash" => |_| todo!(), // fn has a generic type
-    // "Hasher" => non-starter; requires two functions.
+        // std::hash
+        // "BuildHasher"?
+        // "Hash" => |_| todo!(), // fn has a generic type
+        // "Hasher" => non-starter; requires two functions.
 
-    // std::io
-    // Read/Seek are single-function traits, but BufRead/Write require two. Probably best to avoid
-    // std::io completely.
+        // std::io
+        // Read/Seek are single-function traits, but BufRead/Write require two. Probably best to avoid
+        // std::io completely.
 
-    // std::iterator
-    // DoubleEndedIterator::next_back
-    // ExactSizeIterator::len
-    // Extend::extend // fn has a generic type
-    //"FromIterator" => from_iterator, // fn also has a generic type
-    "IntoIterator" => into_iterator,
-    "Iterator" => iterator,
-    // Product::product
-    // Sum::sum
+        // std::iterator
+        // DoubleEndedIterator::next_back
+        // ExactSizeIterator::len
+        // Extend::extend // fn has a generic type
+        //"FromIterator" => from_iterator, // fn also has a generic type
+        "IntoIterator" => into_iterator,
+        "Iterator" => iterator,
+        // Product::product
+        // Sum::sum
 
-    // std::ops
-    "Add" => |f| add_shaped(f, &pq!(::core::ops::Add), &pq!(add)),
-    "AddAssign" => |f| add_assign_shaped(f, &pq!(::core::ops::AddAssign), &pq!(add_assign)),
-    "BitAnd" => |f| add_shaped(f, &pq!(::core::ops::BitAnd), &pq!(bitand)),
-    "BitAndAssign" => |f| add_assign_shaped(f, &pq!(::core::ops::BitAndAssign), &pq!(bitand_assign)),
-    "BitOr" => |f| add_shaped(f, &pq!(::core::ops::BitOr), &pq!(bitor)),
-    "BitOrAssign" => |f| add_assign_shaped(f, &pq!(::core::ops::BitOrAssign), &pq!(bitor_assign)),
-    "BitXor" => |f| add_shaped(f, &pq!(::core::ops::BitXor), &pq!(bitxor)),
-    "BitXorAssign" => |f| add_assign_shaped(f, &pq!(::core::ops::BitXorAssign), &pq!(bitxor_assign)),
-    "Deref" => deref,
-    "DerefMut" => deref_mut,
-    "Div" => |f| add_shaped(f, &pq!(::core::ops::Div), &pq!(div)),
-    "DivAssign" => |f| add_assign_shaped(f, &pq!(::core::ops::DivAssign), &pq!(div_assign)),
-    "Drop" => drop,
-    "Index" => index,
-    "IndexMut" => index_mut,
-    "Mul" => |f| add_shaped(f, &pq!(::core::ops::Mul), &pq!(mul)),
-    "MulAssign" => |f| add_assign_shaped(f, &pq!(::core::ops::MulAssign), &pq!(mul_assign)),
-    "Neg" => |f| neg_shaped(f, &pq!(::core::ops::Neg), &pq!(neg)),
-    "Not" => |f| neg_shaped(f, &pq!(::core::ops::Not), &pq!(not)),
-    "Rem" => |f| add_shaped(f, &pq!(::core::ops::Rem), &pq!(rem)),
-    "RemAssign" => |f| add_assign_shaped(f, &pq!(::core::ops::RemAssign), &pq!(rem_assign)),
-    "Shl" => |f| add_shaped(f, &pq!(::core::ops::Shl), &pq!(shl)),
-    "ShlAssign" => |f| add_assign_shaped(f, &pq!(::core::ops::ShlAssign), &pq!(shl_assign)),
-    "Shr" => |f| add_shaped(f, &pq!(::core::ops::Shr), &pq!(shr)),
-    "ShrAssign" => |f| add_assign_shaped(f, &pq!(::core::ops::ShrAssign), &pq!(shr_assign)),
-    "Sub" => |f| add_shaped(f, &pq!(::core::ops::Sub), &pq!(sub)),
-    "SubAssign" => |f| add_assign_shaped(f, &pq!(::core::ops::SubAssign), &pq!(sub_assign)),
+        // std::ops
+        "Add" => |f| add_shaped(f, &pq!(::core::ops::Add), &pq!(add)),
+        "AddAssign" => |f| add_assign_shaped(f, &pq!(::core::ops::AddAssign), &pq!(add_assign)),
+        "BitAnd" => |f| add_shaped(f, &pq!(::core::ops::BitAnd), &pq!(bitand)),
+        "BitAndAssign" =>
+            |f| add_assign_shaped(f, &pq!(::core::ops::BitAndAssign), &pq!(bitand_assign)),
+        "BitOr" => |f| add_shaped(f, &pq!(::core::ops::BitOr), &pq!(bitor)),
+        "BitOrAssign" =>
+            |f| add_assign_shaped(f, &pq!(::core::ops::BitOrAssign), &pq!(bitor_assign)),
+        "BitXor" => |f| add_shaped(f, &pq!(::core::ops::BitXor), &pq!(bitxor)),
+        "BitXorAssign" =>
+            |f| add_assign_shaped(f, &pq!(::core::ops::BitXorAssign), &pq!(bitxor_assign)),
+        "Deref" => deref,
+        "DerefMut" => deref_mut,
+        "Div" => |f| add_shaped(f, &pq!(::core::ops::Div), &pq!(div)),
+        "DivAssign" => |f| add_assign_shaped(f, &pq!(::core::ops::DivAssign), &pq!(div_assign)),
+        "Drop" => drop,
+        "Index" => index,
+        "IndexMut" => index_mut,
+        "Mul" => |f| add_shaped(f, &pq!(::core::ops::Mul), &pq!(mul)),
+        "MulAssign" => |f| add_assign_shaped(f, &pq!(::core::ops::MulAssign), &pq!(mul_assign)),
+        "Neg" => |f| neg_shaped(f, &pq!(::core::ops::Neg), &pq!(neg)),
+        "Not" => |f| neg_shaped(f, &pq!(::core::ops::Not), &pq!(not)),
+        "Rem" => |f| add_shaped(f, &pq!(::core::ops::Rem), &pq!(rem)),
+        "RemAssign" => |f| add_assign_shaped(f, &pq!(::core::ops::RemAssign), &pq!(rem_assign)),
+        "Shl" => |f| add_shaped(f, &pq!(::core::ops::Shl), &pq!(shl)),
+        "ShlAssign" => |f| add_assign_shaped(f, &pq!(::core::ops::ShlAssign), &pq!(shl_assign)),
+        "Shr" => |f| add_shaped(f, &pq!(::core::ops::Shr), &pq!(shr)),
+        "ShrAssign" => |f| add_assign_shaped(f, &pq!(::core::ops::ShrAssign), &pq!(shr_assign)),
+        "Sub" => |f| add_shaped(f, &pq!(::core::ops::Sub), &pq!(sub)),
+        "SubAssign" => |f| add_assign_shaped(f, &pq!(::core::ops::SubAssign), &pq!(sub_assign)),
 
-    // std::str
-    "FromStr" => from_str,
+        // std::str
+        "FromStr" => from_str,
 
-    // std::string
-    "ToString" => to_string,
+        // std::string
+        "ToString" => to_string,
 
-};
+        _ => return None,
+    };
+
+    Some(func)
+}
 
 /// `fn(&A) -> &T` ⇛ `impl Trait<T> for A { fn op(&self) -> &T }`
 
@@ -301,8 +309,6 @@ fn try_from(func: GenIn) -> Result<TokenStream> {
         meta: FunctionMeta { item_span, generics, to_call, .. },
     } = func.unary()?.result_return()?;
     let where_clause = &generics.where_clause;
-    let error = pq!(Error);
-    let err = err.as_ref().unwrap_or_else(|| &error);
     Ok(quote_spanned! {
         *item_span =>
 
@@ -325,8 +331,6 @@ fn try_into(func: GenIn) -> Result<TokenStream> {
         meta: FunctionMeta { item_span, generics, to_call, .. },
     } = func.unary()?.result_return()?;
     let where_clause = &generics.where_clause;
-    let error = pq!(Error);
-    let err = err.as_ref().unwrap_or_else(|| &error);
     Ok(quote_spanned! {
         *item_span =>
 
@@ -656,8 +660,6 @@ fn from_str(func: GenIn) -> Result<TokenStream> {
         output: (ref output, ref err),
         meta: FunctionMeta { item_span, generics, to_call, .. },
     } = func.ref_param(0)?.unary()?.result_return()?;
-    let error = pq!(Error);
-    let err = err.as_ref().unwrap_or_else(|| &error);
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
         *item_span =>

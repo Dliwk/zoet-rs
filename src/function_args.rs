@@ -6,14 +6,14 @@
 //! a pipeline, starting with the relatively raw `syn` nodes and ultimately producing simple types
 //! which can be easily slotted into the `quote!` macro.
 
-use crate::preamble::*;
+use crate::{error::*, with_tokens::*};
 use core::convert::TryFrom;
 use proc_macro2::{Span, TokenStream};
 use quote::ToTokens;
 use std::borrow::Cow::{self, Borrowed, Owned};
 use syn::{
-    GenericArgument, Generics, Ident, PathArguments, PathSegment, ReturnType, Type, TypePath,
-    TypeReference,
+    parse_quote, GenericArgument, Generics, Ident, PathArguments, PathSegment, ReturnType, Type,
+    TypePath, TypeReference,
 };
 
 /// Processing of function input and output types.
@@ -95,8 +95,7 @@ fn try_mut<'a>(ty: &'a WithTokens<'a, Type>, name: &str) -> Result<Type> {
 fn try_param_type<'a>(ty: &'a WithTokens<'a, Type>) -> Result<Option<(&'a Ident, Box<[Type]>)>> {
     if let Type::Path(TypePath { qself: None, path }) = &ty.value {
         let last = path.segments.last().expect("TypePath::path is always nonempty");
-        if let PathSegment { ident, arguments: PathArguments::AngleBracketed(abga) } = last.value()
-        {
+        if let PathSegment { ident, arguments: PathArguments::AngleBracketed(abga) } = last {
             let args = abga
                 .args
                 .iter()
@@ -109,26 +108,31 @@ fn try_param_type<'a>(ty: &'a WithTokens<'a, Type>) -> Result<Option<(&'a Ident,
         }
     }
     Ok(None)
-    //Error::err(format!("{} type must be `{}<...>`", position_name, required_type), ty.to_tokens)
 }
 
-fn try_result<'a>(ty: &'a WithTokens<'a, Type>, name: &str) -> Result<(Type, Option<Type>)> {
-    match try_param_type(ty)? {
-        Some((ident, box [ref a, ref b])) if ident == "Result" => Ok((a.clone(), Some(b.clone()))),
-        Some((ident, box [ref a])) if ident == "Result" || ident == "Fallible" =>
-            Ok((a.clone(), None)),
-        _ => Error::err(
-            format!("{} type must be `Result<_>`, `Result<_,_>` or `Fallible<_>`", name),
-            ty.to_tokens,
-        ),
+fn try_result<'a>(ty: &'a WithTokens<'a, Type>, name: &str) -> Result<(Type, Type)> {
+    if let Some((ident, boxed)) = try_param_type(ty)? {
+        match (ident.to_string().as_str(), &*boxed) {
+            ("Result", [ref a, ref b]) => return Ok((a.clone(), b.clone())),
+            ("Result", [ref a]) | ("Fallible", [ref a]) =>
+                return Ok((a.clone(), parse_quote! { Error })),
+            _ => (),
+        }
     }
+    Error::err(
+        format!("{} must be `Result<_>`, `Result<_,_>` or `Fallible<_>`", name),
+        ty.to_tokens,
+    )
 }
 
 fn try_option<'a>(ty: &'a WithTokens<'a, Type>, name: &str) -> Result<Type> {
-    match try_param_type(ty)? {
-        Some((ident, box [ref a])) if ident == "Option" => Ok(a.clone()),
-        _ => Error::err(format!("{} type must be `Option<_>`", name), ty.to_tokens),
+    if let Some((ident, boxed)) = try_param_type(ty)? {
+        match (ident.to_string().as_str(), &*boxed) {
+            ("Option", [ref a]) => return Ok(a.clone()),
+            _ => (),
+        }
     }
+    Error::err(format!("{} must be `Option<_>`", name), ty.to_tokens)
 }
 
 impl<'a, O> FunctionArgs<'a, Cow<'a, [WithTokens<'a, Type>]>, O> {
@@ -237,7 +241,7 @@ impl<'a, I> FunctionArgs<'a, I, WithTokens<'a, ReturnType>> {
     /// Checks the function returns a Result, i.e. is `fn(...) -> Result<U>;` or `fn(...) ->
     /// Result<T,U>;`, and sets the output to `(A, Option<B>)`.
 
-    pub fn result_return(self) -> Result<FunctionArgs<'a, I, (Type, Option<Type>)>> {
+    pub fn result_return(self) -> Result<FunctionArgs<'a, I, (Type, Type)>> {
         let fa = self.try_return()?;
         let tys = try_result(&fa.output, "return type")?;
         Ok(fa.with_output(tys))

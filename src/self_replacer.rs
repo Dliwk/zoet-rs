@@ -1,13 +1,13 @@
-use crate::preamble::*;
+use crate::error::*;
+use quote::quote_spanned;
 use syn::{
-    fold::*, spanned::Spanned, ArgCaptured, ArgSelf, ArgSelfRef, FnArg, Ident, Pat, PatIdent,
-    PatStruct, PatTupleStruct, Token, Type, TypePath, TypeReference,
+    fold::*, parse2, spanned::Spanned, FnArg, PatStruct, PatTupleStruct, Receiver, Type, TypePath,
 };
 
 pub struct SelfReplacer<'a> {
     pub self_ty: &'a Type,
     pub errors: Vec<Error>,
-    //pub diagnostics: Vec<Diagnostic>,
+    // pub diagnostics: Vec<Diagnostic>,
 }
 // impl Drop for SelfReplacer<'_> {
 //     fn drop(&mut self) {
@@ -16,7 +16,7 @@ pub struct SelfReplacer<'a> {
 // }
 impl<'a> SelfReplacer<'a> {
     pub fn new(self_ty: &'a Type) -> Self {
-        //Self { self_ty, diagnostics: vec![] }
+        // Self { self_ty, diagnostics: vec![] }
         Self { self_ty, errors: vec![] }
     }
 
@@ -39,7 +39,10 @@ impl<'a> SelfReplacer<'a> {
 impl Fold for SelfReplacer<'_> {
     fn fold_type(&mut self, i: Type) -> Type {
         match i {
-            Type::Path(ref path) if path.path.is_ident("Self") => self.self_ty.clone(),
+            Type::Path(ref path) if path.path.is_ident("Self") => {
+                let ty: Type = self.self_ty.clone();
+                ty
+            }
             _ => fold_type(self, i),
         }
     }
@@ -99,37 +102,22 @@ impl Fold for SelfReplacer<'_> {
 
     fn fold_fn_arg(&mut self, i: FnArg) -> FnArg {
         let span = i.span();
+        let self_ty = self.self_ty.clone();
 
-        match i {
-            FnArg::SelfValue(ArgSelf { mutability, .. }) => FnArg::Captured(ArgCaptured {
-                pat: Pat::Ident(PatIdent {
-                    by_ref: None,
-                    mutability,
-                    ident: Ident::new("self", span),
-                    subpat: None,
-                }),
-                colon_token: Token![:](span),
-                ty: self.self_ty.clone(),
-            }),
-
-            FnArg::SelfRef(ArgSelfRef { ref lifetime, mutability, .. }) =>
-                FnArg::Captured(ArgCaptured {
-                    pat: Pat::Ident(PatIdent {
-                        by_ref: None,
-                        mutability: None,
-                        ident: Ident::new("self", span),
-                        subpat: None,
-                    }),
-                    colon_token: Token![:](span),
-                    ty: Type::Reference(TypeReference {
-                        and_token: Token![&](span),
-                        lifetime: lifetime.clone(),
-                        mutability,
-                        elem: Box::new(self.self_ty.clone()),
-                    }),
-                }),
-
-            _ => fold_fn_arg(self, i),
+        if let FnArg::Receiver(receiver) = &i {
+            match receiver {
+                Receiver { attrs, reference: None, .. } =>
+                    parse2::<FnArg>(quote_spanned!( span => #(#attrs)* self: #self_ty ))
+                        .expect("Mis-interpolated quote!(); please report a bug"),
+                Receiver { attrs, reference: Some((and, lifetime)), mutability, .. } => parse2::<
+                    FnArg,
+                >(
+                    quote_spanned!( span => #(#attrs)* self: #and #lifetime #mutability #self_ty ),
+                )
+                .expect("Mis-interpolated quote!(); please report a bug"),
+            }
+        } else {
+            fold_fn_arg(self, i)
         }
     }
 
@@ -147,17 +135,17 @@ fn test_self_replacer() -> Result<()> {
         (
             quote! { fn testing_testing_one(self) -> Self {} },
             quote! { fn testing_testing_one(self: RealSelf) -> RealSelf {} },
-            //quote! { fn testing_testing_one(self) -> RealSelf {} },
+            // quote! { fn testing_testing_one(self) -> RealSelf {} },
         ),
         (
             quote! { fn testing_two(&self) -> &Self {} },
             quote! { fn testing_two(self: &RealSelf) -> &RealSelf {} },
-            //quote! { fn testing_two(&self) -> &RealSelf {} },
+            // quote! { fn testing_two(&self) -> &RealSelf {} },
         ),
         (
             quote! { fn three(&mut self) -> &mut Self {} },
             quote! { fn three(self: &mut RealSelf) -> &mut RealSelf {} },
-            //quote! { fn three(&mut self) -> &mut RealSelf {} },
+            // quote! { fn three(&mut self) -> &mut RealSelf {} },
         ),
         (
             quote! { fn four(self: Box<Self>) -> Box<Self> {} },
@@ -193,9 +181,9 @@ fn test_self_replacer() -> Result<()> {
         let to_text = to.clone().to_string();
 
         let from_ast = parse2::<Item>(from).unwrap();
-        //dbg! { &from_ast };
+        // dbg! { &from_ast };
         let to_ast = parse2::<Item>(to).unwrap();
-        //dbg! { &to_ast };
+        // dbg! { &to_ast };
         let mut sr = SelfReplacer::new(self_ty);
         let got_ast = sr.fold_item(from_ast.clone());
 
