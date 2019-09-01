@@ -1,6 +1,6 @@
 [package]
 name = "zoet"
-version = "0.1.2"
+version = "0.1.3"
 authors = ["Peter Corlett <abuse@cabal.org.uk>"]
 edition = "2018"
 description = "Adds `#[zoet]` macro to reduce boilerplate when implementing common traits."
@@ -21,6 +21,10 @@ default = []
 # enable to have clippy complain about everything
 clippy-insane = []
 
+[dependencies]
+proc-macro2 = { version = "1.0.2", default-features = false, features = ["span-locations"] }
+quote = { version = "1.0.2", default-features = false }
+
 [dependencies.syn]
 version = "1.0.5"
 default-features = false
@@ -33,7 +37,3 @@ features = [
         "printing",
         "proc-macro",
 ]
-
-[dependencies]
-proc-macro2 = { version = "1.0.1", default-features = false, features = ["span-locations"] }
-quote = { version = "1.0.2", default-features = false }

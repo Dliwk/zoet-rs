@@ -309,8 +309,6 @@ fn try_from(func: GenIn) -> Result<TokenStream> {
         meta: FunctionMeta { item_span, generics, to_call, .. },
     } = func.unary()?.result_return()?;
     let where_clause = &generics.where_clause;
-    let error = pq!(Error);
-    let err = err.as_ref().unwrap_or_else(|| &error);
     Ok(quote_spanned! {
         *item_span =>
 
@@ -333,8 +331,6 @@ fn try_into(func: GenIn) -> Result<TokenStream> {
         meta: FunctionMeta { item_span, generics, to_call, .. },
     } = func.unary()?.result_return()?;
     let where_clause = &generics.where_clause;
-    let error = pq!(Error);
-    let err = err.as_ref().unwrap_or_else(|| &error);
     Ok(quote_spanned! {
         *item_span =>
 
@@ -664,8 +660,6 @@ fn from_str(func: GenIn) -> Result<TokenStream> {
         output: (ref output, ref err),
         meta: FunctionMeta { item_span, generics, to_call, .. },
     } = func.ref_param(0)?.unary()?.result_return()?;
-    let error = pq!(Error);
-    let err = err.as_ref().unwrap_or_else(|| &error);
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
         *item_span =>
