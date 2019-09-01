@@ -131,7 +131,7 @@ fn zoet_inherent_impl(attr: &TokenStream, mut item_impl: ItemImpl) -> Result<Tok
 
 fn trait_fns<'a>(
     nested_metas: &'a Punctuated<NestedMeta, Token![,]>,
-) -> Result<impl Iterator<Item = Result<&'static GenFn>> + 'a> {
+) -> Result<impl Iterator<Item = Result<GenFn>> + 'a> {
     if nested_metas.is_empty() {
         return Error::err("attribute ought to contain a trait or list of traits", nested_metas);
     }
@@ -145,8 +145,7 @@ fn trait_fns<'a>(
                 .get_ident()
                 .ok_or_else(|| Error::new("this is not a valid trait name", value))
                 .and_then(|ident| {
-                    TRAIT_FNS
-                        .get(ident.to_string().as_str())
+                    get_trait_fn(ident.to_string().as_str())
                         .context("this is not a known trait name", ident)
                 }),
         },

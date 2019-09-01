@@ -112,22 +112,28 @@ fn try_param_type<'a>(ty: &'a WithTokens<'a, Type>) -> Result<Option<(&'a Ident,
 }
 
 fn try_result<'a>(ty: &'a WithTokens<'a, Type>, name: &str) -> Result<(Type, Option<Type>)> {
-    match try_param_type(ty)? {
-        Some((ident, box [ref a, ref b])) if ident == "Result" => Ok((a.clone(), Some(b.clone()))),
-        Some((ident, box [ref a])) if ident == "Result" || ident == "Fallible" =>
-            Ok((a.clone(), None)),
-        _ => Error::err(
-            format!("{} type must be `Result<_>`, `Result<_,_>` or `Fallible<_>`", name),
-            ty.to_tokens,
-        ),
+    if let Some((ident, boxed)) = try_param_type(ty)? {
+        match (ident.to_string().as_str(), &*boxed) {
+            ("Result", [ref a, ref b]) => return Ok((a.clone(), Some(b.clone()))),
+            ("Result", [ref a]) => return Ok((a.clone(), None)),
+            ("Fallible", [ref a]) => return Ok((a.clone(), None)),
+            _ => (),
+        }
     }
+    Error::err(
+        format!("{} must be `Result<_>`, `Result<_,_>` or `Fallible<_>`", name),
+        ty.to_tokens,
+    )
 }
 
 fn try_option<'a>(ty: &'a WithTokens<'a, Type>, name: &str) -> Result<Type> {
-    match try_param_type(ty)? {
-        Some((ident, box [ref a])) if ident == "Option" => Ok(a.clone()),
-        _ => Error::err(format!("{} type must be `Option<_>`", name), ty.to_tokens),
+    if let Some((ident, boxed)) = try_param_type(ty)? {
+        match (ident.to_string().as_str(), &*boxed) {
+            ("Option", [ref a]) => return Ok(a.clone()),
+            _ => (),
+        }
     }
+    Error::err(format!("{} must be `Option<_>`", name), ty.to_tokens)
 }
 
 impl<'a, O> FunctionArgs<'a, Cow<'a, [WithTokens<'a, Type>]>, O> {

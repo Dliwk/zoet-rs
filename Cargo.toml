@@ -21,11 +21,19 @@ default = []
 # enable to have clippy complain about everything
 clippy-insane = []
 
-[dependencies]
-phf = { version = "0.7.24", default-features = false, features = ["macros"] }
-proc-macro2 = { version = "1.0.1", default-features = false, features = ["span-locations"] }
-quote = { version = "1.0.2", default-features = false }
-
 [dependencies.syn]
 version = "1.0.5"
-features = ["full", "fold", "extra-traits"]
+default-features = false
+features = [
+        "clone-impls",
+        "extra-traits",
+        "fold",
+        "full",
+        "parsing",
+        "printing",
+        "proc-macro",
+]
+
+[dependencies]
+proc-macro2 = { version = "1.0.1", default-features = false, features = ["span-locations"] }
+quote = { version = "1.0.2", default-features = false }

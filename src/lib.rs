@@ -6,9 +6,6 @@ with `AsRef`, had a hard-to-debug problem because you implemented `PartialOrd` a
 thought that deriving `Ord` would do the sane thing, and/or you would rather just implement these
 core traits as regular methods in your `impl Bar` like lesser languages, this crate is for you!
 
-Unfortunately, it uses nightly features, so if you need to use the stable compiler, you are going
-to have to wait in anticipation for the features to stablilise before you can use it.
-
 It is superficially similar to the various derive macros such as [`derive_more`], except that
 rather than generating traits based on the contents of a struct, it generates them based on
 individual functions/methods. An example works better than a textual description ever would:
@@ -155,12 +152,6 @@ You are also reminded that [`cargo-expand`] exists, and can be used to inspect t
     clippy::wildcard_enum_match_arm,
 ))]
 // -- end of boilerplate that's generally pasted into the top of new projects -- //
-
-// needed for phf_macros
-#![feature(proc_macro_hygiene)]
-// since we've ended up with a dependency on nightly anyway, we may as well fill our boots to tidy
-// the code...
-#![feature(box_patterns)]
 
 extern crate proc_macro;
 
