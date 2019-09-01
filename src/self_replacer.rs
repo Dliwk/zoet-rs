@@ -7,7 +7,7 @@ use syn::{
 pub struct SelfReplacer<'a> {
     pub self_ty: &'a Type,
     pub errors: Vec<Error>,
-    //pub diagnostics: Vec<Diagnostic>,
+    // pub diagnostics: Vec<Diagnostic>,
 }
 // impl Drop for SelfReplacer<'_> {
 //     fn drop(&mut self) {
@@ -16,7 +16,7 @@ pub struct SelfReplacer<'a> {
 // }
 impl<'a> SelfReplacer<'a> {
     pub fn new(self_ty: &'a Type) -> Self {
-        //Self { self_ty, diagnostics: vec![] }
+        // Self { self_ty, diagnostics: vec![] }
         Self { self_ty, errors: vec![] }
     }
 
@@ -135,17 +135,17 @@ fn test_self_replacer() -> Result<()> {
         (
             quote! { fn testing_testing_one(self) -> Self {} },
             quote! { fn testing_testing_one(self: RealSelf) -> RealSelf {} },
-            //quote! { fn testing_testing_one(self) -> RealSelf {} },
+            // quote! { fn testing_testing_one(self) -> RealSelf {} },
         ),
         (
             quote! { fn testing_two(&self) -> &Self {} },
             quote! { fn testing_two(self: &RealSelf) -> &RealSelf {} },
-            //quote! { fn testing_two(&self) -> &RealSelf {} },
+            // quote! { fn testing_two(&self) -> &RealSelf {} },
         ),
         (
             quote! { fn three(&mut self) -> &mut Self {} },
             quote! { fn three(self: &mut RealSelf) -> &mut RealSelf {} },
-            //quote! { fn three(&mut self) -> &mut RealSelf {} },
+            // quote! { fn three(&mut self) -> &mut RealSelf {} },
         ),
         (
             quote! { fn four(self: Box<Self>) -> Box<Self> {} },
@@ -181,9 +181,9 @@ fn test_self_replacer() -> Result<()> {
         let to_text = to.clone().to_string();
 
         let from_ast = parse2::<Item>(from).unwrap();
-        //dbg! { &from_ast };
+        // dbg! { &from_ast };
         let to_ast = parse2::<Item>(to).unwrap();
-        //dbg! { &to_ast };
+        // dbg! { &to_ast };
         let mut sr = SelfReplacer::new(self_ty);
         let got_ast = sr.fold_item(from_ast.clone());
 

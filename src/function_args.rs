@@ -108,7 +108,7 @@ fn try_param_type<'a>(ty: &'a WithTokens<'a, Type>) -> Result<Option<(&'a Ident,
         }
     }
     Ok(None)
-    //Error::err(format!("{} type must be `{}<...>`", position_name, required_type), ty.to_tokens)
+    // Error::err(format!("{} type must be `{}<...>`", position_name, required_type), ty.to_tokens)
 }
 
 fn try_result<'a>(ty: &'a WithTokens<'a, Type>, name: &str) -> Result<(Type, Option<Type>)> {

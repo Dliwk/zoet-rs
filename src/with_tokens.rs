@@ -37,7 +37,7 @@ impl<T: fmt::Debug> fmt::Debug for WithTokens<'_, T> {
     }
 }
 impl<'a, T> WithTokens<'a, T> {
-    //fn new(value: T, to_tokens: &'a dyn ToTokens) -> Self { Self { value, to_tokens } }
+    // fn new(value: T, to_tokens: &'a dyn ToTokens) -> Self { Self { value, to_tokens } }
 
     #[must_use = "This returns a new object with updated values. Were you expecting a mutator?"]
     pub fn with_value<U>(&self, value: U) -> WithTokens<'a, U> {
@@ -52,10 +52,8 @@ impl<'a, T> WithTokens<'a, T> {
 
 impl<'a> WithTokens<'a, &'a ReturnType> {
     pub fn from_return_type(
-        return_type: &'a ReturnType,
-        self_ty: Option<&'a Type>,
-    ) -> Result<WithTokens<'a, ReturnType>>
-    {
+        return_type: &'a ReturnType, self_ty: Option<&'a Type>,
+    ) -> Result<WithTokens<'a, ReturnType>> {
         let to_tokens = return_type;
         let mut return_type = return_type.clone();
 
@@ -70,10 +68,8 @@ impl<'a> WithTokens<'a, &'a ReturnType> {
 
 impl<'a> WithTokens<'a, Type> {
     pub fn from_fn_arg(
-        fn_arg: &'a FnArg,
-        self_ty: Option<&'a Type>,
-    ) -> Result<WithTokens<'a, Type>>
-    {
+        fn_arg: &'a FnArg, self_ty: Option<&'a Type>,
+    ) -> Result<WithTokens<'a, Type>> {
         let to_tokens = fn_arg;
         let mut fn_arg = fn_arg.clone();
 
