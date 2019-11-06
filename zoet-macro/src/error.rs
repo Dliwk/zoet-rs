@@ -44,7 +44,9 @@ impl Error {
     }
 }
 impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.write_str(&self.message) }
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(&self.message)
+    }
 }
 pub trait ResultExt<T> {
     fn context(self, message: impl Into<Cow<'static, str>>, span: impl ToTokens) -> Result<T>;

@@ -1,0 +1,18 @@
+[package]
+name = "zoet"
+version = "0.1.4"
+authors = ["Peter Corlett <abuse@cabal.org.uk>"]
+edition = "2018"
+description = "Adds `#[zoet]` macro to reduce boilerplate when implementing common traits."
+license = "MIT"
+repository = "https://github.com/mooli/zoet-rs"
+keywords = ["macro", "derive", "trait", "boilerplate", "sweet"]
+categories = ["development-tools", "development-tools::procedural-macro-helpers", "no-std", "rust-patterns" ]
+readme = "../README.md"
+
+[dependencies]
+zoet-macro = { version = "0.1.4", path = "../zoet-macro/" }
+
+[features]
+clippy-insane = ["zoet-macro/clippy-insane"] # enable to have clippy moan extensively
+default = []

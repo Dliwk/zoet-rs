@@ -52,8 +52,8 @@ pub(crate) fn get_trait_fn(key: &str) -> Option<GenFn> {
         // "Hasher" => non-starter; requires two functions.
 
         // std::io
-        // Read/Seek are single-function traits, but BufRead/Write require two. Probably best to avoid
-        // std::io completely.
+        // Read/Seek are single-function traits, but BufRead/Write require two. Probably best to
+        // avoid std::io completely.
 
         // std::iterator
         // DoubleEndedIterator::next_back
@@ -110,7 +110,6 @@ pub(crate) fn get_trait_fn(key: &str) -> Option<GenFn> {
 }
 
 /// `fn(&A) -> &T` ⇛ `impl Trait<T> for A { fn op(&self) -> &T }`
-
 fn borrow_shaped(func: GenIn, trait_name: &Path, method_name: &Ident) -> Result<TokenStream> {
     let FunctionArgs {
         ref input,
@@ -120,18 +119,15 @@ fn borrow_shaped(func: GenIn, trait_name: &Path, method_name: &Ident) -> Result<
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
         *item_span =>
-
+         #[allow(clippy::pedantic)]
         impl #generics #trait_name <#output> for #input #where_clause {
             fn #method_name (&self) -> &#output {
                 #to_call(self)
             }
         }
-
     })
 }
-
 /// `fn(&mut A) -> &T` ⇛ `impl Trait<T> for A { fn op(&mut self) -> &mut T }`
-
 fn borrow_mut_shaped(func: GenIn, trait_name: &Path, method_name: &Ident) -> Result<TokenStream> {
     let FunctionArgs {
         ref input,
@@ -141,18 +137,15 @@ fn borrow_mut_shaped(func: GenIn, trait_name: &Path, method_name: &Ident) -> Res
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
         *item_span =>
-
+       #[allow(clippy::pedantic)]
         impl #generics #trait_name <#output> for #input #where_clause {
             fn #method_name (&mut self) -> &mut #output {
                 #to_call(self)
             }
         }
-
     })
 }
-
 /// `fn(&A) -> T` ⇛ `impl Trait for A { type Assoc = T; fn op(&self) -> T }`
-
 fn to_owned(func: GenIn) -> Result<TokenStream> {
     let FunctionArgs {
         ref input,
@@ -162,19 +155,16 @@ fn to_owned(func: GenIn) -> Result<TokenStream> {
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
         *item_span =>
-
-        impl #generics ::std::borrow::ToOwned for #input #where_clause {
+       #[allow(clippy::pedantic)]
+        impl #generics ::zoet::traits::ToOwned for #input #where_clause {
             type Owned = #output;
             fn to_owned(&self) -> #output {
                 #to_call(self)
             }
         }
-
     })
 }
-
 /// `fn(&A) -> T` ⇛ `impl Trait for A { fn op(&self) -> #out }` (`A` = `T`)
-
 fn clone(func: GenIn) -> Result<TokenStream> {
     let FunctionArgs {
         ref input,
@@ -184,16 +174,14 @@ fn clone(func: GenIn) -> Result<TokenStream> {
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
         *item_span =>
-
-        impl #generics ::std::clone::Clone for #input #where_clause {
+       #[allow(clippy::pedantic)]
+        impl #generics ::core::clone::Clone for #input #where_clause {
             fn clone(&self) -> #output {
                 #to_call(self)
             }
         }
-
     })
 }
-
 fn ord_shaped(func: GenIn, trait_name: &Path, method_name: &Ident) -> Result<TokenStream> {
     let FunctionArgs {
         input: (ref lhs, ref rhs),
@@ -203,19 +191,16 @@ fn ord_shaped(func: GenIn, trait_name: &Path, method_name: &Ident) -> Result<Tok
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
         *item_span =>
-
+       #[allow(clippy::pedantic)]
         impl #generics #trait_name for #lhs #where_clause {
             fn #method_name(&self, other: &#rhs) -> #output {
                 #to_call(self, other)
             }
         }
-
     })
 }
-
 fn partial_ord(func: GenIn) -> Result<TokenStream> {
     let filtered = func.ref_param(0)?.ref_param(1)?.binary()?;
-
     if let Ok(FunctionArgs {
         input: (ref lhs, ref rhs),
         ref output,
@@ -227,13 +212,12 @@ fn partial_ord(func: GenIn) -> Result<TokenStream> {
         let where_clause = &generics.where_clause;
         Ok(quote_spanned! {
             *item_span =>
-
+           #[allow(clippy::pedantic)]
             impl #generics ::core::cmp::PartialOrd for #lhs #where_clause {
                 fn partial_cmp(&self, other: &#rhs) -> ::core::option::Option<#output> {
                     #to_call(self, other)
                 }
             }
-
         })
     } else {
         let FunctionArgs {
@@ -246,19 +230,16 @@ fn partial_ord(func: GenIn) -> Result<TokenStream> {
         let where_clause = &generics.where_clause;
         Ok(quote_spanned! {
             *item_span =>
-
+           #[allow(clippy::pedantic)]
             impl #generics ::core::cmp::PartialOrd for #lhs #where_clause {
                 fn partial_cmp(&self, other: &#rhs) -> ::core::option::Option<#output> {
                     ::core::option::Option::Some(#to_call(self, other))
                 }
             }
-
         })
     }
 }
-
 /// `fn(A) -> T` ⇛ `impl Trait<A> for T { fn op(A) -> T }`
-
 fn from(func: GenIn) -> Result<TokenStream> {
     let FunctionArgs {
         ref input,
@@ -268,18 +249,15 @@ fn from(func: GenIn) -> Result<TokenStream> {
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
         *item_span =>
-
+       #[allow(clippy::pedantic)]
         impl #generics ::core::convert::From<#input> for #output #where_clause {
             fn from(value: #input) -> #output {
                 #to_call(value)
             }
         }
-
     })
 }
-
 /// `fn(A) -> T` ⇛ `impl Trait<T> for A { fn op(self) -> T }`
-
 fn into(func: GenIn) -> Result<TokenStream> {
     let FunctionArgs {
         ref input,
@@ -289,19 +267,16 @@ fn into(func: GenIn) -> Result<TokenStream> {
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
         *item_span =>
-
+       #[allow(clippy::pedantic)]
         impl #generics ::core::convert::Into<#output> for #input #where_clause {
             fn into(self) -> #output {
                 #to_call(value)
             }
         }
-
     })
 }
-
 /// `fn(A) -> Result<T, U>` ⇛
 /// `impl Trait<A> for T { type Assoc = U; fn op(A) -> Result<T, U> }`
-
 fn try_from(func: GenIn) -> Result<TokenStream> {
     let FunctionArgs {
         ref input,
@@ -311,19 +286,16 @@ fn try_from(func: GenIn) -> Result<TokenStream> {
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
         *item_span =>
-
+       #[allow(clippy::pedantic)]
         impl #generics ::core::convert::TryFrom<#input> for #output #where_clause {
             type Error = #err;
             fn try_from(value: #input) -> ::core::result::Result<#output, #err> {
                 #to_call(value)
             }
         }
-
     })
 }
-
 /// `fn(A) -> Result<T, U>` ⇛ `impl Trait<T> for A { type Assoc = U; fn op(self) -> Result<T, U> }`
-
 fn try_into(func: GenIn) -> Result<TokenStream> {
     let FunctionArgs {
         ref input,
@@ -333,19 +305,16 @@ fn try_into(func: GenIn) -> Result<TokenStream> {
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
         *item_span =>
-
+       #[allow(clippy::pedantic)]
         impl #generics ::core::convert::TryInto<#output> for #input #where_clause {
             type Error = #err;
             fn try_into(self) -> ::core::result::Result<#output, #err> {
                 #to_call(self)
             }
         }
-
     })
 }
-
 /// `fn() => T` ⇛ `impl Trait for T { fn op() -> T }`
-
 fn default(func: GenIn) -> Result<TokenStream> {
     let FunctionArgs {
         input: (),
@@ -355,18 +324,15 @@ fn default(func: GenIn) -> Result<TokenStream> {
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
         *item_span =>
-
+       #[allow(clippy::pedantic)]
         impl #generics ::core::default::Default for #output #where_clause {
             fn default() -> #output {
                 #to_call()
             }
         }
-
     })
 }
-
 /// `fn(&A, &mut B) -> T` ⇛ `impl Trait for A { fn op(&self, &mut B) -> T }`
-
 fn debug_shaped(func: GenIn, trait_name: &Path) -> Result<TokenStream> {
     let FunctionArgs {
         input: (ref obj, ref formatter),
@@ -376,18 +342,15 @@ fn debug_shaped(func: GenIn, trait_name: &Path) -> Result<TokenStream> {
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
         *item_span =>
-
+       #[allow(clippy::pedantic)]
         impl #generics #trait_name for #obj #where_clause {
             fn fmt(&self, f: &mut #formatter) -> #output {
                 #to_call(self, f)
             }
         }
-
     })
 }
-
 /// `fn(&mut A, &B) -> T` ⇛ `impl Trait for A { fn op(&mut self, &B) -> T }`
-
 fn write(func: GenIn) -> Result<TokenStream> {
     let FunctionArgs {
         input: (ref obj, ref str),
@@ -397,19 +360,16 @@ fn write(func: GenIn) -> Result<TokenStream> {
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
         *item_span =>
-
+       #[allow(clippy::pedantic)]
         impl #generics ::core::fmt::Write for #obj #where_clause {
             fn write_str(&mut self, s: &#str) -> #output {
                 #to_call(self, s)
             }
         }
-
     })
 }
-
 /// `fn(A) -> T` ⇛
 /// `impl Trait for A { type Assoc1 = Out; type Assoc2 = <Out as Trait>::Assoc2; fn op(self) -> Out }`
-
 fn into_iterator(func: GenIn) -> Result<TokenStream> {
     let FunctionArgs {
         ref input,
@@ -419,7 +379,7 @@ fn into_iterator(func: GenIn) -> Result<TokenStream> {
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
         *item_span =>
-
+       #[allow(clippy::pedantic)]
         impl #generics ::core::iter::IntoIterator for #input #where_clause {
             type IntoIter = #output;
             type Item = <#output as ::core::iter::Iterator>::Item;
@@ -427,13 +387,10 @@ fn into_iterator(func: GenIn) -> Result<TokenStream> {
                 #to_call(self)
             }
         }
-
     })
 }
-
 /// `fn(&mut A) -> Option<T>` ⇛
 /// `impl Trait for A { type Assoc1 = Out; fn op(&mut In) -> Option<Out> }`
-
 fn iterator(func: GenIn) -> Result<TokenStream> {
     let FunctionArgs {
         ref input,
@@ -443,24 +400,20 @@ fn iterator(func: GenIn) -> Result<TokenStream> {
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
         *item_span =>
-
+       #[allow(clippy::pedantic)]
         impl #generics ::core::iter::Iterator for #input #where_clause {
             type Item = #output;
             fn next(&mut self) -> Option<#output> {
-                 #to_call(self)
-             }
+                #to_call(self)
+            }
         }
-
     })
 }
-
 /// Switches implementation based on function signature:
 /// * `fn(&mut A, B)` ⇛ `impl Trait<B> for A { fn op(&mut self, B) }`
 /// * `fn(A, B) -> T` ⇛ implementation which doesn't just forward the call
-
 fn add_shaped(func: GenIn, trait_name: &Path, method_name: &Ident) -> Result<TokenStream> {
     let filter_add_assign = || func.clone().mut_param(0)?.binary()?.default_return();
-
     if let Ok(function_args) = filter_add_assign() {
         // This actually fits add_assign, so we generate a mutate-and-return implementation instead.
         let FunctionArgs {
@@ -471,17 +424,15 @@ fn add_shaped(func: GenIn, trait_name: &Path, method_name: &Ident) -> Result<Tok
         let where_clause = &generics.where_clause;
         return Ok(quote_spanned! {
             *item_span =>
-
+           #[allow(clippy::pedantic)]
             impl #generics #trait_name<#rhs> for #lhs #where_clause {
                 type Output = #lhs;
                 fn #method_name(mut self, rhs: #rhs) -> #lhs {
                     #to_call(&mut self, rhs) ; self
                 }
             }
-
         });
     }
-
     let FunctionArgs {
         input: (ref lhs, ref rhs),
         ref output,
@@ -490,19 +441,16 @@ fn add_shaped(func: GenIn, trait_name: &Path, method_name: &Ident) -> Result<Tok
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
         *item_span =>
-
+       #[allow(clippy::pedantic)]
         impl #generics #trait_name<#rhs> for #lhs #where_clause {
             type Output = #output;
             fn #method_name(self, rhs: #rhs) -> #output {
                 #to_call(self, rhs)
             }
         }
-
     })
 }
-
 /// `fn(&mut A, B)` ⇛ `impl Trait<B> for A { fn op(&mut self, B) }`
-
 fn add_assign_shaped(func: GenIn, trait_name: &Path, method_name: &Ident) -> Result<TokenStream> {
     let FunctionArgs {
         input: (ref lhs, ref rhs),
@@ -512,18 +460,15 @@ fn add_assign_shaped(func: GenIn, trait_name: &Path, method_name: &Ident) -> Res
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
         *item_span =>
-
+       #[allow(clippy::pedantic)]
         impl #generics #trait_name<#rhs> for #lhs #where_clause {
             fn #method_name(&mut self, rhs: #rhs) {
                 #to_call(self, rhs)
             }
         }
-
     })
 }
-
 /// `fn(&mut A)` ⇛ `impl Trait for A { fn op(&mut self) }`
-
 fn drop(func: GenIn) -> Result<TokenStream> {
     let FunctionArgs {
         ref input,
@@ -533,18 +478,15 @@ fn drop(func: GenIn) -> Result<TokenStream> {
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
         *item_span =>
-
+       #[allow(clippy::pedantic)]
         impl #generics ::core::ops::Drop for #input #where_clause {
             fn drop(&mut self) {
                 #to_call(self)
             }
         }
-
     })
 }
-
 /// `fn(&A, B) -> &T` ⇛ `impl Trait<B> for A { fn op(&self, B) -> &T }`
-
 fn index(func: GenIn) -> Result<TokenStream> {
     let FunctionArgs {
         input: (ref coll, ref idx),
@@ -554,19 +496,16 @@ fn index(func: GenIn) -> Result<TokenStream> {
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
         *item_span =>
-
+       #[allow(clippy::pedantic)]
         impl #generics ::core::ops::Index<#idx> for #coll #where_clause {
             type Output = #output;
             fn index(&self, index: #idx) -> &#output {
                 #to_call(self, index)
             }
         }
-
     })
 }
-
 /// `fn(&mut A, B) -> &mut T` ⇛ `impl Trait<B> for A { fn op(&mut self, B) -> &mut T }`
-
 fn index_mut(func: GenIn) -> Result<TokenStream> {
     let FunctionArgs {
         input: (ref coll, ref idx),
@@ -576,18 +515,15 @@ fn index_mut(func: GenIn) -> Result<TokenStream> {
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
         *item_span =>
-
+       #[allow(clippy::pedantic)]
         impl #generics ::core::ops::IndexMut<#idx> for #coll #where_clause {
             fn index_mut(&mut self, index: #idx) -> &mut #output {
                 #to_call(self, index)
             }
         }
-
     })
 }
-
 /// `fn(A) -> T` ⇛ `impl Trait for A { type Assoc = T; fn op(self) -> T }`
-
 fn neg_shaped(func: GenIn, trait_name: &Path, method_name: &Ident) -> Result<TokenStream> {
     let FunctionArgs {
         ref input,
@@ -597,19 +533,16 @@ fn neg_shaped(func: GenIn, trait_name: &Path, method_name: &Ident) -> Result<Tok
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
         *item_span =>
-
+       #[allow(clippy::pedantic)]
         impl #generics #trait_name for #input #where_clause {
             type Output = #output;
             fn #method_name(self) -> #output {
                 #to_call(self)
             }
         }
-
     })
 }
-
 /// `fn(&A) -> &T` ⇛ `impl Trait for A { fn op(&self) -> &T }`
-
 fn deref(func: GenIn) -> Result<TokenStream> {
     let FunctionArgs {
         ref input,
@@ -619,19 +552,16 @@ fn deref(func: GenIn) -> Result<TokenStream> {
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
         *item_span =>
-
+       #[allow(clippy::pedantic)]
         impl #generics ::core::ops::Deref for #input #where_clause {
             type Target = #output;
             fn deref(&self) -> &#output {
                 #to_call(self)
             }
         }
-
     })
 }
-
 /// `fn(&mut A) -> &mut T` ⇛ `impl Trait for A { fn op(&mut self) -> &mut T }`
-
 fn deref_mut(func: GenIn) -> Result<TokenStream> {
     let FunctionArgs {
         ref input,
@@ -641,19 +571,16 @@ fn deref_mut(func: GenIn) -> Result<TokenStream> {
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
         *item_span =>
-
+       #[allow(clippy::pedantic)]
         impl #generics ::core::ops::DerefMut for #input #where_clause {
             fn deref_mut(&mut self) -> &mut #output {
                 #to_call(self)
             }
         }
-
     })
 }
-
 /// `fn(&A) -> Result<T, U>` ⇛ `impl Trait for T { type Assoc = U; fn op(&self) -> Result<T, U> }`
 // This is a special case of TryInto
-
 fn from_str(func: GenIn) -> Result<TokenStream> {
     let FunctionArgs {
         ref input,
@@ -663,20 +590,17 @@ fn from_str(func: GenIn) -> Result<TokenStream> {
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
         *item_span =>
-
+       #[allow(clippy::pedantic)]
         impl #generics ::core::str::FromStr for #output #where_clause {
             type Err = #err;
             fn from_str(s: &#input) -> ::core::result::Result<#output, #err> {
                 #to_call(s)
             }
         }
-
     })
 }
-
 /// `fn(&A) -> T` ⇛ `impl Trait for A { fn op(&self) -> T }`
 // This is a special-case of ToOwned
-
 fn to_string(func: GenIn) -> Result<TokenStream> {
     let FunctionArgs {
         ref input,
@@ -686,12 +610,11 @@ fn to_string(func: GenIn) -> Result<TokenStream> {
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
         *item_span =>
-
-        impl #generics ::std::string::ToString for #input #where_clause {
+       #[allow(clippy::pedantic)]
+        impl #generics ::zoet::traits::ToString for #input #where_clause {
             fn to_string(&self) -> #output {
                 #to_call(self)
             }
         }
-
     })
 }
