@@ -7,42 +7,64 @@ struct Length(f64);
 #[zoet]
 impl Length {
     #[zoet(From)]
-    fn new<I: Into<f64>>(value: I) -> Self { Self(value.into()) }
+    fn new<I: Into<f64>>(value: I) -> Self {
+        Self(value.into())
+    }
 
     #[zoet(Display, Debug)]
-    fn debug(&self, fmt: &mut fmt::Formatter) -> fmt::Result { fmt.write_str(&self.0.to_string()) }
+    fn debug(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        fmt.write_str(&self.0.to_string())
+    }
 
     #[zoet(Clone)]
-    fn clone(&self) -> Self { Self(self.0) }
+    fn clone(&self) -> Self {
+        Self(self.0)
+    }
 
     // Can either implement an op_assign and let both Op and OpAssign be implemented in terms of
     // it...:
     #[zoet(Add, AddAssign)]
-    fn add_assign(&mut self, other: Self) { self.0 += other.0 }
+    fn add_assign(&mut self, other: Self) {
+        self.0 += other.0
+    }
 
     // ... or they can be implemented independently:
     #[zoet(Sub)]
-    fn sub(self, other: Self) -> Self { Self(self.0 - other.0) }
+    fn sub(self, other: Self) -> Self {
+        Self(self.0 - other.0)
+    }
 
     #[zoet(SubAssign)]
-    fn sub_assign(&mut self, other: Self) { self.0 -= other.0 }
+    fn sub_assign(&mut self, other: Self) {
+        self.0 -= other.0
+    }
 
     // both-at-once is easier...
     #[zoet(Mul, MulAssign)]
-    fn mul_assign(&mut self, other: f64) { self.0 *= other }
+    fn mul_assign(&mut self, other: f64) {
+        self.0 *= other
+    }
 
     #[zoet(Div, DivAssign)]
-    fn div_assign(&mut self, other: f64) { self.0 /= other }
+    fn div_assign(&mut self, other: f64) {
+        self.0 /= other
+    }
 
     // ... but it doesn't work if the output type is not the input type.
     #[zoet(Mul)]
-    fn mul_self(self, other: Self) -> f64 { self.0 * other.0 }
+    fn mul_self(self, other: Self) -> f64 {
+        self.0 * other.0
+    }
 
     #[zoet(Div)]
-    fn div_self(self, other: Self) -> f64 { self.0 / other.0 }
+    fn div_self(self, other: Self) -> f64 {
+        self.0 / other.0
+    }
 
     #[zoet(Neg)]
-    fn neg(self) -> Self { Self::default() - self }
+    fn neg(self) -> Self {
+        Self::default() - self
+    }
 
     #[zoet(Index)]
     fn index(&self, index: usize) -> &f64 {
@@ -64,7 +86,9 @@ impl Length {
     // but that doesn't test this crate.
 
     #[zoet(PartialEq)]
-    fn partial_eq(&self, other: &Self) -> bool { self.0 == other.0 }
+    fn partial_eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
 
     // f64 isn't Ord
     // #[zoet(Ord)]
@@ -74,10 +98,14 @@ impl Length {
 
     // test ordering, PartialOrd-style.
     #[zoet(PartialOrd)]
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> { self.0.partial_cmp(&other.0) }
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.0.partial_cmp(&other.0)
+    }
 
     #[zoet(Default)]
-    fn default() -> Self { Self(0.0) }
+    fn default() -> Self {
+        Self(0.0)
+    }
 }
 
 #[derive(PartialEq, Eq)]
@@ -87,7 +115,9 @@ struct IntLength(i64);
 impl IntLength {
     // Test orderign, Ord-style.
     #[zoet(Ord, PartialOrd)]
-    fn partial_cmp(&self, other: &Self) -> Ordering { self.0.cmp(&other.0) }
+    fn partial_cmp(&self, other: &Self) -> Ordering {
+        self.0.cmp(&other.0)
+    }
 }
 
 fn main() {

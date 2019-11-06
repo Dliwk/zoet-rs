@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 2019-11-06: Release 0.1.4
+
+Added `#[allow(clippy::pedantic)]` to all derived impls. This allows you to turn on All The
+Lints and find issues in your own code withough having Clippy complain about macro-generated
+code that you can't really do anything about.
+
+Split into separate `zoet` and `zoet-macro` crates. This is a cascading change caused by wanting
+to support `no_std` code by re-exporting names from the `alloc` crate, and thus needed the macro
+implementation in a separate crate so the main crate could have `pub` items.
+
 ## 2019-09-01: Release 0.1.3
 
 Refactored to use `syn` 0.1.

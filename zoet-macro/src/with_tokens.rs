@@ -21,7 +21,9 @@ pub struct WithTokens<'a, T> {
 impl<T> Deref for WithTokens<'_, T> {
     type Target = T;
 
-    fn deref(&self) -> &T { &self.value }
+    fn deref(&self) -> &T {
+        &self.value
+    }
 }
 impl<T> ToTokens for WithTokens<'_, T> {
     fn to_tokens(&self, tokens: &mut TokenStream) {

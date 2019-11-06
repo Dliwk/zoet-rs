@@ -4,7 +4,9 @@ mod failure_fallible {
     struct Error;
 
     #[zoet::zoet(TryFrom)]
-    fn test(_foo: Foo) -> Fallible<()> { Ok(()) }
+    fn test(_foo: Foo) -> Fallible<()> {
+        Ok(())
+    }
 }
 
 mod std_result {
@@ -12,7 +14,9 @@ mod std_result {
     struct Error;
 
     #[zoet::zoet(TryFrom)]
-    fn test(_foo: Foo) -> Result<(), Error> { Ok(()) }
+    fn test(_foo: Foo) -> Result<(), Error> {
+        Ok(())
+    }
 }
 
 mod typedef_result {
@@ -21,5 +25,7 @@ mod typedef_result {
     struct Error;
 
     #[zoet::zoet(TryFrom)]
-    fn test(_foo: Foo) -> Result<()> { Ok(()) }
+    fn test(_foo: Foo) -> Result<()> {
+        Ok(())
+    }
 }
