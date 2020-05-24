@@ -19,22 +19,34 @@
 //! #[zoet]
 //! impl Length {
 //!     #[zoet(Default)] // generates `impl Default for Length`
-//!     pub fn new() -> Self { Self(0) }
+//!     pub fn new() -> Self {
+//!         Self(0)
+//!     }
 //!
 //!     #[zoet(From)] // generates `From<usize> for Length`
-//!     fn from_usize(value: usize) -> Self { Self(value) }
+//!     fn from_usize(value: usize) -> Self {
+//!         Self(value)
+//!     }
 //!
 //!     #[zoet(From)] // generates `From<Length> for usize`
-//!     fn to_usize(self) -> usize { self.0 }
+//!     fn to_usize(self) -> usize {
+//!         self.0
+//!     }
 //!
 //!     #[zoet(AsRef, Borrow, Deref)] // generates all of those
-//!     fn as_usize(&self) -> &usize { &self.0 }
+//!     fn as_usize(&self) -> &usize {
+//!         &self.0
+//!     }
 //!
 //!     #[zoet(Add, AddAssign)] // generates `impl Add for Length` and `impl AddAssign for Length`
-//!     fn add_assign(&mut self, rhs: Self) { self.0 += rhs.0; }
+//!     fn add_assign(&mut self, rhs: Self) {
+//!         self.0 += rhs.0;
+//!     }
 //!
 //!     #[zoet(Ord, PartialOrd)] // you get the idea by now
-//!     fn ord(&self, other: &Self) -> Ordering { self.0.cmp(&other.0) }
+//!     fn ord(&self, other: &Self) -> Ordering {
+//!         self.0.cmp(&other.0)
+//!     }
 //! }
 //!
 //! let mut v = Length::default();
@@ -63,7 +75,7 @@
 //! * `core::iterator`: `FromIterator`, `Iterator` (implements the `next` method).
 //! * `core::ops`: `Deref`, `DerefMut`, `Drop`, `Index`, `IndexMut`, plus all arithmetic and bit
 //! ops and assignment variants such as `Add` and `AddAssign`.
-//! *`core::str`: `FromStr`.
+//! * `core::str`: `FromStr`.
 //! * `std::string`/`alloc::string`: `ToString`.
 //!
 //! These traits normally just include the trait boilerplate and forward the arguments to your
@@ -98,6 +110,27 @@
 //!
 //! [`cargo-expand`]: https://crates.io/crates/cargo-expand
 //! [`derive_more`]: https://crates.io/crates/derive_more
+
+#![cfg_attr(feature = "clippy-insane", warn(
+    //// Turn the "allow" lints listed by `rustc -W help` (as of 2020-04-16) into warn lints:
+    absolute_paths_not_starting_with_crate, anonymous_parameters, box_pointers,
+    deprecated_in_future, elided_lifetimes_in_paths, explicit_outlives_requirements,
+    indirect_structural_match, keyword_idents, macro_use_extern_crate, meta_variable_misuse,
+    missing_copy_implementations, missing_crate_level_docs, missing_debug_implementations,
+    missing_doc_code_examples, missing_docs, non_ascii_idents, private_doc_tests,
+    single_use_lifetimes, trivial_casts, trivial_numeric_casts, unreachable_pub, unsafe_code,
+    unstable_features, unused_extern_crates, unused_import_braces, unused_lifetimes,
+    unused_qualifications, unused_results, variant_size_differences,
+    //// Ditto for clippy lint categories (see https://github.com/rust-lang/rust-clippy):
+    clippy::all, clippy::cargo, clippy::nursery, clippy::pedantic, clippy::restriction,
+), allow(
+    //// turn off individual noisy/buggy lints enabled by broader categories above:
+    // box_pointers,               // yeah, we allocate: get over it
+    // elided_lifetimes_in_paths,  // it may be "deprecated", but adding <'_> everywhere is ugly
+    // unreachable_pub,            // putting pub(crate) everywhere isn't helpful
+))]
+#![forbid(unsafe_code)]
+#![no_std]
 
 extern crate alloc;
 /// Re-exports of [`alloc`] traits so [`zoet`](crate)-generated code does not require `extern crate

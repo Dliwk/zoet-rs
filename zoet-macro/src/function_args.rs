@@ -21,6 +21,7 @@ use syn::{
 /// This is a selection of methods which validate and transform function signatures into a form
 /// suitable for placing into templates.
 
+#[derive(Copy, Clone)]
 pub struct FunctionMeta<'a> {
     // These are things we can turn into a TokenStream and thus a pair of Spans (for start and end
     // location) in error reporting.
@@ -30,7 +31,7 @@ pub struct FunctionMeta<'a> {
     pub ident_to_tokens: &'a dyn ToTokens,
 
     // This is the span of the function/method. TODO: this is probably redundant and one of the
-    // above would suffice.
+    // above would suffice. (Span is both small and Copy, so we don't bother with a reference.)
     pub item_span: Span,
 
     // And these are bits pasted into the output traits
@@ -45,7 +46,7 @@ pub struct FunctionMeta<'a> {
 pub struct FunctionArgs<'a, I, O> {
     pub input: I,
     pub output: O,
-    pub meta: &'a FunctionMeta<'a>,
+    pub meta: FunctionMeta<'a>,
 }
 
 impl<'a, I, O> FunctionArgs<'a, I, O> {
@@ -76,23 +77,38 @@ fn param_name(index: usize) -> Cow<'static, str> {
     }
 }
 
-fn try_ref<'a>(ty: &'a WithTokens<'a, Type>, name: &str) -> Result<Type> {
+fn check_ref<'a>(ty: &'a WithTokens<'a, Type>, name: &str) -> Result<()> {
     match &ty.value {
-        Type::Reference(TypeReference { lifetime: None, mutability: None, elem, .. }) =>
-            Ok(elem.as_ref().clone()),
+        Type::Reference(TypeReference { mutability: None, .. }) => Ok(()),
         _ => Error::err(format!("{} must be an immutable reference", name), ty.to_tokens),
     }
 }
 
-fn try_mut<'a>(ty: &'a WithTokens<'a, Type>, name: &str) -> Result<Type> {
+// TODO: handle lifetime arguments. This probably involves reworking our data model somewhat.
+fn unwrap_ref<'a>(ty: &'a WithTokens<'a, Type>, name: &str) -> Result<Type> {
     match &ty.value {
-        Type::Reference(TypeReference { lifetime: None, mutability: Some(_), elem, .. }) =>
+        Type::Reference(TypeReference { lifetime: None, mutability: None, elem, .. }) =>
             Ok(elem.as_ref().clone()),
-        _ => Error::err(format!("{} must be a mutable reference", name), ty.to_tokens),
+        _ => Error::err(
+            format!("{} must be an immutable reference and not have a lifetime argument", name),
+            ty.to_tokens,
+        ),
     }
 }
 
-fn try_param_type<'a>(ty: &'a WithTokens<'a, Type>) -> Result<Option<(&'a Ident, Box<[Type]>)>> {
+// TODO: handle lifetime arguments
+fn unwrap_mut<'a>(ty: &'a WithTokens<'a, Type>, name: &str) -> Result<Type> {
+    match &ty.value {
+        Type::Reference(TypeReference { lifetime: None, mutability: Some(_), elem, .. }) =>
+            Ok(elem.as_ref().clone()),
+        _ => Error::err(
+            format!("{} must be a mutable reference and not have a lifetime argument", name),
+            ty.to_tokens,
+        ),
+    }
+}
+
+fn unwrap_param_type<'a>(ty: &'a WithTokens<'a, Type>) -> Result<Option<(&'a Ident, Box<[Type]>)>> {
     if let Type::Path(TypePath { qself: None, path }) = &ty.value {
         let last = path.segments.last().expect("TypePath::path is always nonempty");
         if let PathSegment { ident, arguments: PathArguments::AngleBracketed(abga) } = last {
@@ -110,12 +126,13 @@ fn try_param_type<'a>(ty: &'a WithTokens<'a, Type>) -> Result<Option<(&'a Ident,
     Ok(None)
 }
 
-fn try_result<'a>(ty: &'a WithTokens<'a, Type>, name: &str) -> Result<(Type, Type)> {
-    if let Some((ident, boxed)) = try_param_type(ty)? {
+fn unwrap_result<'a>(ty: &'a WithTokens<'a, Type>, name: &str) -> Result<(Type, Type)> {
+    if let Some((ident, boxed)) = unwrap_param_type(ty)? {
         match (ident.to_string().as_str(), &*boxed) {
             ("Result", [ref a, ref b]) => return Ok((a.clone(), b.clone())),
-            ("Result", [ref a]) | ("Fallible", [ref a]) =>
-                return Ok((a.clone(), parse_quote! { Error })),
+            ("Result", [ref a]) | ("Fallible", [ref a]) => {
+                return Ok((a.clone(), parse_quote! { Error }));
+            }
             _ => (),
         }
     }
@@ -125,35 +142,45 @@ fn try_result<'a>(ty: &'a WithTokens<'a, Type>, name: &str) -> Result<(Type, Typ
     )
 }
 
-fn try_option<'a>(ty: &'a WithTokens<'a, Type>, name: &str) -> Result<Type> {
-    if let Some((ident, boxed)) = try_param_type(ty)? {
-        match (ident.to_string().as_str(), &*boxed) {
-            ("Option", [ref a]) => return Ok(a.clone()),
-            _ => (),
+fn unwrap_option<'a>(ty: &'a WithTokens<'a, Type>, name: &str) -> Result<Type> {
+    if let Some((ident, boxed)) = unwrap_param_type(ty)? {
+        if let ("Option", [ref a]) = (ident.to_string().as_str(), &*boxed) {
+            return Ok(a.clone());
         }
     }
     Error::err(format!("{} must be `Option<_>`", name), ty.to_tokens)
 }
 
 impl<'a, O> FunctionArgs<'a, Cow<'a, [WithTokens<'a, Type>]>, O> {
-    pub fn ref_param(mut self, index: usize) -> Result<Self> {
+    pub fn check_ref_param(mut self, index: usize) -> Result<Self> {
         match self.input.to_mut().get_mut(index) {
             None =>
                 Error::err(format!("{} is missing", param_name(index)), self.meta.ident_to_tokens),
             Some(param) => {
-                let result = try_ref(param, &param_name(index))?;
+                check_ref(param, &param_name(index))?;
+                Ok(self)
+            }
+        }
+    }
+
+    pub fn unwrap_ref_param(mut self, index: usize) -> Result<Self> {
+        match self.input.to_mut().get_mut(index) {
+            None =>
+                Error::err(format!("{} is missing", param_name(index)), self.meta.ident_to_tokens),
+            Some(param) => {
+                let result = unwrap_ref(param, &param_name(index))?;
                 param.value = result;
                 Ok(self)
             }
         }
     }
 
-    pub fn mut_param(mut self, index: usize) -> Result<Self> {
+    pub fn unwrap_mut_param(mut self, index: usize) -> Result<Self> {
         match self.input.to_mut().get_mut(index) {
             None =>
                 Error::err(format!("{} is missing", param_name(index)), self.meta.ident_to_tokens),
             Some(param) => {
-                let result = try_mut(param, &param_name(index))?;
+                let result = unwrap_mut(param, &param_name(index))?;
                 param.value = result;
                 Ok(self)
             }
@@ -223,36 +250,36 @@ impl<'a, I> FunctionArgs<'a, I, WithTokens<'a, ReturnType>> {
     /// Checks the function returns a reference, i.e. is `fn(...) -> &A;`, and sets the output to
     /// `A`.
 
-    pub fn ref_return(self) -> Result<FunctionArgs<'a, I, Type>> {
+    pub fn unwrap_ref_return(self) -> Result<FunctionArgs<'a, I, Type>> {
         let fa = self.try_return()?;
-        let ty = try_ref(&fa.output, "return type")?;
+        let ty = unwrap_ref(&fa.output, "return type")?;
         Ok(fa.with_output(ty))
     }
 
     /// Checks the function returns a mutable reference, i.e. is (`fn(...) -> &mut A;`, and sets
     /// the output to `A`.
 
-    pub fn mut_return(self) -> Result<FunctionArgs<'a, I, Type>> {
+    pub fn unwrap_mut_return(self) -> Result<FunctionArgs<'a, I, Type>> {
         let fa = self.try_return()?;
-        let ty = try_mut(&fa.output, "return type")?;
+        let ty = unwrap_mut(&fa.output, "return type")?;
         Ok(fa.with_output(ty))
     }
 
     /// Checks the function returns a Result, i.e. is `fn(...) -> Result<U>;` or `fn(...) ->
     /// Result<T,U>;`, and sets the output to `(A, Option<B>)`.
 
-    pub fn result_return(self) -> Result<FunctionArgs<'a, I, (Type, Type)>> {
+    pub fn unwrap_result_return(self) -> Result<FunctionArgs<'a, I, (Type, Type)>> {
         let fa = self.try_return()?;
-        let tys = try_result(&fa.output, "return type")?;
+        let tys = unwrap_result(&fa.output, "return type")?;
         Ok(fa.with_output(tys))
     }
 
     /// Checks the function returns an Option, i.e. is `fn(...) -> Option<U>;`, and sets the output
     /// to `A`.
 
-    pub fn option_return(self) -> Result<FunctionArgs<'a, I, Type>> {
+    pub fn unwrap_option_return(self) -> Result<FunctionArgs<'a, I, Type>> {
         let fa = self.try_return()?;
-        let tys = try_option(&fa.output, "return type")?;
+        let tys = unwrap_option(&fa.output, "return type")?;
         Ok(fa.with_output(tys))
     }
 }

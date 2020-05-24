@@ -11,8 +11,10 @@ categories = ["development-tools", "development-tools::procedural-macro-helpers"
 readme = "../README.md"
 
 [dependencies]
-zoet-macro = { version = "0.1.4", path = "../zoet-macro/" }
+zoet-macro = { version = "0.1.4", path = "../zoet-macro/", default-features = false }
 
 [features]
 clippy-insane = ["zoet-macro/clippy-insane"] # enable to have clippy moan extensively
-default = []
+default = [
+        "clippy-insane"
+]

@@ -19,14 +19,7 @@ fn zoet_free_fn(attr: &TokenStream, item_fn: ItemFn) -> Result<TokenStream> {
     let mut tokens = TokenStream::new();
 
     let sig = &item_fn.sig;
-    let to_call = &sig.ident.clone().into_token_stream();
-
-    let meta = FunctionMeta {
-        item_span: item_fn.span(),
-        ident_to_tokens: &sig.ident,
-        to_call,
-        generics: &sig.generics,
-    };
+    let to_call = &(&sig.ident).into_token_stream();
 
     let input = sig
         .inputs
@@ -34,14 +27,19 @@ fn zoet_free_fn(attr: &TokenStream, item_fn: ItemFn) -> Result<TokenStream> {
         .map(|fn_arg| WithTokens::from_fn_arg(fn_arg, None))
         .collect::<Result<Cow<_>>>()?;
 
-    let attr_trait_fns = trait_fns(&attr)?;
-
-    for attr_trait_fn in attr_trait_fns {
+    let meta = FunctionMeta {
+        item_span: item_fn.span(),
+        ident_to_tokens: &sig.ident,
+        to_call,
+        generics: &sig.generics,
+    };
+    for (_nested_meta, attr_trait_fn) in trait_fns(&attr)? {
+        //        meta.item_span = nested_meta.span();
         let attr_trait_fn = attr_trait_fn?;
         let args = FunctionArgs {
             input: Cow::clone(&input),
             output: WithTokens::from_return_type(&sig.output, None)?,
-            meta: &meta,
+            meta,
         };
         let trait_tokens = attr_trait_fn(args)?;
         tokens.extend(trait_tokens);
@@ -76,9 +74,14 @@ fn zoet_inherent_impl(attr: &TokenStream, mut item_impl: ItemImpl) -> Result<Tok
 
     for item in &mut item_impl.items {
         if let ImplItem::Method(ref mut method @ ImplItemMethod { .. }) = item {
+            let mut copied_attrs = Vec::new();
             // drain_filter would be nice, but it's not stable yet.
-            let (fn_zoet_attrs, fn_other_attrs) =
-                method.attrs.drain(..).partition(|attr| attr.path.is_ident("zoet"));
+            let (fn_zoet_attrs, fn_other_attrs) = method.attrs.drain(..).partition(|attr| {
+                if attr.path.is_ident("cfg") || attr.path.is_ident("doc_cfg") {
+                    copied_attrs.push(attr.clone());
+                }
+                attr.path.is_ident("zoet")
+            });
             method.attrs = fn_other_attrs;
 
             for attr in fn_zoet_attrs {
@@ -89,13 +92,6 @@ fn zoet_inherent_impl(attr: &TokenStream, mut item_impl: ItemImpl) -> Result<Tok
                 let method_ident = &sig.ident;
                 let self_ty = &item_impl.self_ty;
                 let to_call = &quote! { < #self_ty > :: #method_ident };
-
-                let meta = FunctionMeta {
-                    item_span: method.span(),
-                    ident_to_tokens: &method.sig.ident,
-                    to_call,
-                    generics: &merge_generics(item_impl.generics.clone(), &sig.generics),
-                };
 
                 let input = sig
                     .inputs
@@ -109,46 +105,65 @@ fn zoet_inherent_impl(attr: &TokenStream, mut item_impl: ItemImpl) -> Result<Tok
                     _ => return Error::err("expected a parenthesised list", attr)?,
                 };
 
-                let attr_trait_fns = trait_fns(&attr)?;
+                // TODO: refactor so that item_span takes the nested_meta returned by trait_fns(),
+                // but at the moment there are lifetime inference problems.
 
-                for attr_trait_fn in attr_trait_fns {
+                let meta = FunctionMeta {
+                    //item_span: method.span(),
+                    item_span: attr.span(),
+                    ident_to_tokens: &method.sig.ident,
+                    to_call,
+                    generics: &merge_generics(item_impl.generics.clone(), &sig.generics),
+                };
+
+                for (_nested_meta, attr_trait_fn) in trait_fns(&attr)? {
                     let attr_trait_fn = attr_trait_fn?;
                     let args = FunctionArgs {
                         input: Cow::clone(&input),
                         output: WithTokens::from_return_type(&sig.output, Some(self_ty))?,
-                        meta: &meta,
+                        meta,
                     };
                     let trait_tokens = attr_trait_fn(args)?;
+                    // TODO: deal with inner attributes properly, rather than just cloddishly paste
+                    // them in front of the generated code.
+                    // TODO: also do this for free functions.
+                    for copied_attr in &copied_attrs {
+                        tokens.extend(copied_attr.into_token_stream());
+                    }
                     tokens.extend(trait_tokens);
                 }
             }
+            //tokens.extend(quote!{ fn wat() {} });
+            //dbg!{ method.into_token_stream().to_string() };
         }
     }
-
     tokens.extend(item_impl.into_token_stream());
     Ok(tokens)
 }
 
-fn trait_fns<'a>(
-    nested_metas: &'a Punctuated<NestedMeta, Token![,]>,
-) -> Result<impl Iterator<Item = Result<GenFn>> + 'a> {
+fn trait_fns(
+    nested_metas: &Punctuated<NestedMeta, Token![,]>,
+) -> Result<impl Iterator<Item = (&NestedMeta, Result<GenFn>)>> {
     if nested_metas.is_empty() {
         return Error::err("attribute ought to contain a trait or list of traits", nested_metas);
     }
 
-    Ok(nested_metas.iter().map(|nested_meta| match nested_meta {
-        NestedMeta::Lit(lit) => Error::err("literals are not valid here", lit),
-        NestedMeta::Meta(meta) => match meta {
-            Meta::List(value) => Error::err("this does not take parameters", value),
-            Meta::NameValue(value) => Error::err("this does not take a parameter", value),
-            Meta::Path(value) => value
-                .get_ident()
-                .ok_or_else(|| Error::new("this is not a valid trait name", value))
-                .and_then(|ident| {
-                    get_trait_fn(ident.to_string().as_str())
-                        .context("this is not a known trait name", ident)
-                }),
-        },
+    Ok(nested_metas.iter().map(|nested_meta| {
+        let result = match nested_meta {
+            NestedMeta::Lit(lit) => Error::err("literals are not valid here", lit),
+            NestedMeta::Meta(meta) => match meta {
+                Meta::List(value) => Error::err("this does not take parameters", value),
+                Meta::NameValue(value) => Error::err("this does not take a parameter", value),
+                Meta::Path(value) => value
+                    .get_ident()
+                    .ok_or_else(|| Error::new("this is not a valid trait name", value))
+                    .and_then(|ident| {
+                        get_trait_fn(ident.to_string().as_str())
+                            .context("this is not a known trait name", ident)
+                    }),
+            },
+        };
+        (nested_meta, result)
     }))
 }
 
