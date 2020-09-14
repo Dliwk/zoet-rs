@@ -1,6 +1,6 @@
 [package]
 name = "zoet-macro"
-version = "0.1.4"
+version = "0.1.5"
 authors = ["Peter Corlett <abuse@cabal.org.uk>"]
 edition = "2018"
 description = "Implementation detail for `#[zoet]` macro"
@@ -11,14 +11,15 @@ categories = ["development-tools", "development-tools::procedural-macro-helpers"
 readme = "../README.md"
 
 [dependencies]
-proc-macro2 = { version = "1.0.17", default-features = false, features = ["span-locations"] }
-quote = { version = "1.0.6", default-features = false }
+proc-macro-error = "1.0.4"
+proc-macro2 = { version = "1.0.21", default-features = false, features = ["span-locations"] }
+quote = { version = "1.0.7", default-features = false }
 
 [dependencies.syn]
-version = "1.0.23"
+version = "1.0.40"
 features = [                    # Reason why this feature is needed:
         "extra-traits",         # Debug output in tests.
-        "fold",                 # `self_replacer` needs to tree-walk.
+        "visit-mut",            # `self_replacer` needs to tree-walk.
         "full",                 # for parsing code and not just types.
 ]
 

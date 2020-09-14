@@ -1,49 +1,56 @@
-use crate::error::*;
+use crate::prelude::*;
 use quote::quote_spanned;
 use syn::{
-    fold::*, parse2, spanned::Spanned, FnArg, PatStruct, PatTupleStruct, Receiver, Type, TypePath,
+    parse2, spanned::Spanned, visit_mut::*, FnArg, PatStruct, PatTupleStruct, Path, Receiver, Type,
+    TypePath,
 };
 
-pub struct SelfReplacer<'a> {
-    pub self_ty: &'a Type,
-    pub errors: Vec<Error>,
-    // pub diagnostics: Vec<Diagnostic>,
+pub(crate) struct SelfReplacer<'a> {
+    self_ty: &'a Type,
 }
-// impl Drop for SelfReplacer<'_> {
-//     fn drop(&mut self) {
-//         self.emit_diagnostics();
-//     }
-// }
+
 impl<'a> SelfReplacer<'a> {
-    pub fn new(self_ty: &'a Type) -> Self {
-        // Self { self_ty, diagnostics: vec![] }
-        Self { self_ty, errors: vec![] }
+    pub(crate) fn new(self_ty: &'a Type) -> Self {
+        Self { self_ty }
     }
 
-    pub fn try_replace<T>(self_ty: &'a Type, mut ast: T, op: fn(&mut Self, T) -> T) -> Result<T> {
+    pub(crate) fn try_replace_mut<T>(self_ty: &'a Type, ast: &mut T, op: fn(&mut Self, &mut T)) {
         let mut sr = Self::new(self_ty);
-        ast = op(&mut sr, ast);
-        let mut errors = sr.errors.drain(..);
-        if let Some(e) = errors.next() { Err(e) } else { Ok(ast) }
+        op(&mut sr, ast);
     }
 
-    // pub fn clear_diagnostics(&mut self) {
-    //     self.diagnostics.clear()
-    // }
-
-    // pub fn emit_diagnostics(&mut self) {
-    //     self.diagnostics.drain(..).for_each(Diagnostic::emit);
-    // }
+    fn replace_self_in_path(&self, path: &mut Path) {
+        if path.is_ident("Self") {
+            if let Type::Path(TypePath {
+                qself: None,
+                path: ref self_path,
+            }) = *self.self_ty
+            {
+                *path = self_path.clone()
+            } else {
+                // self.diagnostics.push(
+                //     Diagnostic::spanned(
+                //         path.span().unwrap(),
+                //         Level::Error,
+                //         "Cannot replace Self in this struct pattern with the actual self type",
+                //     )
+                //     .help("The self type needs to be a path such as `Foo`")
+                //     .span_note(
+                //         self.self_ty.full_span().unwrap(),
+                //         "We tried to use this as the self type",
+                //     ),
+                // );
+                abort!(path, "cannot replace Self in non-path types");
+            }
+        }
+    }
 }
 
-impl Fold for SelfReplacer<'_> {
-    fn fold_type(&mut self, i: Type) -> Type {
-        match i {
-            Type::Path(ref path) if path.path.is_ident("Self") => {
-                let ty: Type = self.self_ty.clone();
-                ty
-            }
-            _ => fold_type(self, i),
+impl VisitMut for SelfReplacer<'_> {
+    fn visit_type_mut(&mut self, i: &mut Type) {
+        match *i {
+            Type::Path(ref path) if path.path.is_ident("Self") => *i = self.self_ty.clone(),
+            _ => visit_type_mut(self, i),
         }
     }
 
@@ -54,70 +61,40 @@ impl Fold for SelfReplacer<'_> {
     // {...}`) can only implement a path (a "base type", in the error messages) so no problem occurs
     // there, but trait impls don't have that limitation.
 
-    fn fold_pat_struct(&mut self, mut i: PatStruct) -> PatStruct {
-        if i.path.is_ident("Self") {
-            if let Type::Path(TypePath { qself: None, ref path }) = *self.self_ty {
-                i.path = path.clone();
-            } else {
-                // self.diagnostics.push(
-                //     Diagnostic::spanned(
-                //         path.span().unwrap(),
-                //         Level::Error,
-                //         "Cannot replace Self in this struct pattern with the actual self type",
-                //     )
-                //     .help("The self type needs to be a path such as `Foo`")
-                //     .span_note(
-                //         self.self_ty.full_span().unwrap(),
-                //         "We tried to use this as the self type",
-                //     ),
-                // );
-                self.errors.push(Error::new("cannot replace Self in non-path types", &i.path));
-            }
-        }
-        fold_pat_struct(self, i)
+    fn visit_pat_struct_mut(&mut self, i: &mut PatStruct) {
+        self.replace_self_in_path(&mut i.path);
+        visit_pat_struct_mut(self, i)
     }
 
-    fn fold_pat_tuple_struct(&mut self, mut i: PatTupleStruct) -> PatTupleStruct {
-        if i.path.is_ident("Self") {
-            if let Type::Path(TypePath { qself: None, ref path }) = self.self_ty {
-                i.path = path.clone();
-            } else {
-                // self.diagnostics.push(
-                //     Diagnostic::spanned(
-                //         path.span().unwrap(),
-                //         Level::Error,
-                //         "Cannot replace Self in this struct pattern with the actual self type",
-                //     )
-                //     .help("The self type needs to be a path such as `Foo`")
-                //     .span_note(
-                //         self.self_ty.full_span().unwrap(),
-                //         "We tried to use this as the self type",
-                //     ),
-                // );
-                self.errors.push(Error::new("cannot replace Self in non-path types", &i.path));
-            }
-        }
-        fold_pat_tuple_struct(self, i)
+    fn visit_pat_tuple_struct_mut(&mut self, i: &mut PatTupleStruct) {
+        self.replace_self_in_path(&mut i.path);
+        visit_pat_tuple_struct_mut(self, i)
     }
 
-    fn fold_fn_arg(&mut self, i: FnArg) -> FnArg {
+    fn visit_fn_arg_mut(&mut self, i: &mut FnArg) {
         let span = i.span();
         let self_ty = self.self_ty.clone();
 
-        if let FnArg::Receiver(receiver) = &i {
-            match receiver {
-                Receiver { attrs, reference: None, .. } =>
-                    parse2::<FnArg>(quote_spanned!( span => #(#attrs)* self: #self_ty ))
-                        .expect("Mis-interpolated quote!(); please report a bug"),
-                Receiver { attrs, reference: Some((and, lifetime)), mutability, .. } => parse2::<
-                    FnArg,
-                >(
+        if let FnArg::Receiver(ref receiver) = *i {
+            *i = match *receiver {
+                Receiver {
+                    ref attrs,
+                    reference: None,
+                    ..
+                } => parse2::<FnArg>(quote_spanned!( span => #(#attrs)* self: #self_ty )),
+
+                Receiver {
+                    ref attrs,
+                    reference: Some((ref and, ref lifetime)),
+                    mutability,
+                    ..
+                } => parse2::<FnArg>(
                     quote_spanned!( span => #(#attrs)* self: #and #lifetime #mutability #self_ty ),
-                )
-                .expect("Mis-interpolated quote!(); please report a bug"),
+                ),
             }
+            .expect_or_abort("Mis-interpolated quote!(); please report a bug")
         } else {
-            fold_fn_arg(self, i)
+            visit_fn_arg_mut(self, i)
         }
     }
 
@@ -164,14 +141,9 @@ fn test_self_replacer() -> Result<()> {
             quote! { fn seven(RealSelf(x, y) : RealSelf ) {} },
         ),
         /* (
-         *     quote! {
-         *         fn inner(self) { struct Foo; impl Foo { fn new() -> Self { Self } } }
-         *     },
-         *     quote! {
-         *         fn inner(self: Self) { struct Foo; impl Foo { fn new() -> Self { Self } } }
-         *     },
-         * ),
-         */
+         *     quote! {fn inner(self) { struct Foo; impl Foo { fn new() -> Self { Self } } }},
+         *     quote! {fn inner(self: Self) { struct Foo; impl Foo { fn new() -> Self { Self } } }},
+         * ), */
     ];
 
     let self_ty = &parse2::<Type>(quote! { RealSelf }).unwrap();
@@ -185,7 +157,8 @@ fn test_self_replacer() -> Result<()> {
         let to_ast = parse2::<Item>(to).unwrap();
         // dbg! { &to_ast };
         let mut sr = SelfReplacer::new(self_ty);
-        let got_ast = sr.fold_item(from_ast.clone());
+        let mut got_ast = from_ast.clone();
+        sr.visit_item_mut(&mut got_ast);
 
         let got_text = got_ast.clone().into_token_stream().to_string();
 
@@ -195,7 +168,7 @@ fn test_self_replacer() -> Result<()> {
         );
 
         assert_eq!(&to_ast, &got_ast, "{}", log);
-        assert!(sr.errors.is_empty(), "{}", log);
+        // assert!(sr.errors.is_empty(), "{}", log);
     }
     Ok(())
 }
