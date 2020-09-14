@@ -6,9 +6,13 @@ struct FooBuf(String);
 
 #[zoet]
 impl Foo {
+    fn new(s: &str) -> &Self {
+        unsafe { &*(s as *const str as *const Foo) }
+    }
+
     #[zoet(ToOwned)]
     fn to_owned(&self) -> FooBuf {
-       FooBuf(self.0.to_owned())
+        FooBuf(self.0.to_owned())
     }
 
     #[zoet(ToString)]
@@ -21,7 +25,6 @@ impl Foo {
 impl FooBuf {
     #[zoet(Borrow)]
     fn as_ref(&self) -> &Foo {
-        let s: &str = &self.0;
-        unsafe { &*(s as *const str as *const Foo) }
+        Foo::new(&self.0)
     }
 }

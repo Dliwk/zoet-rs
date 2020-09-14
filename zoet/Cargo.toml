@@ -1,6 +1,6 @@
 [package]
 name = "zoet"
-version = "0.1.4"
+version = "0.1.5"
 authors = ["Peter Corlett <abuse@cabal.org.uk>"]
 edition = "2018"
 description = "Adds `#[zoet]` macro to reduce boilerplate when implementing common traits."
@@ -9,10 +9,20 @@ repository = "https://github.com/mooli/zoet-rs"
 keywords = ["macro", "derive", "trait", "boilerplate", "sweet"]
 categories = ["development-tools", "development-tools::procedural-macro-helpers", "no-std", "rust-patterns" ]
 readme = "../README.md"
-
-[dependencies]
-zoet-macro = { version = "0.1.4", path = "../zoet-macro/" }
+include = ["src/lib.rs"]
 
 [features]
-clippy-insane = ["zoet-macro/clippy-insane"] # enable to have clippy moan extensively
-default = []
+
+default = [
+        "alloc",
+#        "clippy-insane",
+]
+
+#### The public features.
+## enable to support generating alloc:: traits
+alloc = []
+## enable to have clippy moan extensively. Mainly a developer flag, so you probably don't want it.
+clippy-insane = ["zoet-macro/clippy-insane"]
+
+[dependencies]
+zoet-macro = { version = "0.1.5", path = "../zoet-macro/", default-features = false }
