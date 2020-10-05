@@ -76,11 +76,13 @@
 //! * `core::cmp`: `Ord`, `PartialEq`, `PartialOrd`.
 //! * `core::convert`: `AsMut`, `AsRef`, `From`, `Into`, `TryFrom`, `TryInto`.
 //! * `core::default`: `Default`.
-//! * `core::fmt`: `Debug`, `Display`, `Write` (implements `write_str`).
+//! * `core::fmt`: `Binary` `Debug` `Display` `LowerExp` `LowerHex` `Octal` `Pointer` `UpperExp`
+//!   `UpperHex`, `Write` (implements `write_str`).
+//! * `core::future`: `Future`.
 //! * `core::hash`: `Hash` (implements `hash`).
 //! * `core::iterator`: `IntoIterator`, `Iterator` (implements `next`).
 //! * `core::ops`: `Deref`, `DerefMut`, `Drop`, `Index`, `IndexMut`, plus all arithmetic and bit
-//! ops and assignment variants such as `Add` and `AddAssign`.
+//!   ops and assignment variants such as `Add` and `AddAssign`.
 //! * `core::str`: `FromStr`.
 //!
 //! The `alloc` feature (which is enabled by default) also adds these:
@@ -103,8 +105,8 @@
 //! A suitable impl is emitted which proxies to your function, such as this:
 //!
 //!```
-//! # struct Length;
-//! # impl Length {pub fn new() -> Self {todo!();}}
+//! # struct Length(usize);
+//! # impl Length { pub fn new() -> Self { Self(0) } }
 //! #[automatically_derived]
 //! #[allow(unused_qualifications)]
 //! impl ::core::default::Default for Length {

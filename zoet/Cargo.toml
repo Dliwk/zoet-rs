@@ -1,6 +1,6 @@
 [package]
 name = "zoet"
-version = "0.1.5"
+version = "0.1.6"
 authors = ["Peter Corlett <abuse@cabal.org.uk>"]
 edition = "2018"
 description = "Adds `#[zoet]` macro to reduce boilerplate when implementing common traits."
@@ -25,4 +25,4 @@ alloc = []
 clippy-insane = ["zoet-macro/clippy-insane"]
 
 [dependencies]
-zoet-macro = { version = "0.1.5", path = "../zoet-macro/", default-features = false }
+zoet-macro = { version = "0.1.6", path = "../zoet-macro/", default-features = false }

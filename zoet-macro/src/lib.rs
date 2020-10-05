@@ -53,7 +53,7 @@ macro_rules! diagnostic_error {
 
 mod prelude {
     pub(crate) use proc_macro_error::{
-        abort, diagnostic, emit_error, emit_warning, Diagnostic, OptionExt, ResultExt,
+        abort, diagnostic, emit_error, emit_warning, Diagnostic, OptionExt as _, ResultExt as _,
     };
     pub(crate) type Result<T, E = Diagnostic> = core::result::Result<T, E>;
 }
@@ -69,7 +69,6 @@ mod zoet;
 pub fn zoet(
     attr: proc_macro::TokenStream,
     item: proc_macro::TokenStream,
-) -> proc_macro::TokenStream
-{
+) -> proc_macro::TokenStream {
     crate::zoet::zoet(&attr.into(), &item.into()).into()
 }

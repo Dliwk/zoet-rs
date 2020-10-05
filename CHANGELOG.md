@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 2020-10-05: Release 0.1.6
+
+Added the remaining `std::fmt` formatting traits.
+
+Did a minor refactor so the rules can pattern-match any wrapper class, not just `Option`; this
+allows matching the signature of `Future::poll` — so `Future` is now supported.
+
 ## 2020-09-14: Release 0.1.5
 
 Ripped out the ad-hoc error and `compile_error!` injection and replaced it with the
