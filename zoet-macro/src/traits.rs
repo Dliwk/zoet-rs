@@ -10,6 +10,13 @@ pub(crate) type GenFn = fn(GenIn) -> GenOut;
 
 pub(crate) fn get_trait_fn(key: &str) -> Option<GenFn> {
     let func: GenFn = match key {
+        // std::alloc
+        // "Allocator" => Requires two functions to be implemented.
+        // "GlobalAlloc" => Requires two functions to be implemented.
+
+        // std::any
+        // "Any" => doable.
+
         // std::borrow
         "Borrow" => |f| borrow_shaped(f, &pq!(::core::borrow::Borrow), &pq!(borrow)),
         "BorrowMut" => |f| borrow_mut_shaped(f, &pq!(::core::borrow::BorrowMut), &pq!(borrow_mut)),
@@ -19,7 +26,7 @@ pub(crate) fn get_trait_fn(key: &str) -> Option<GenFn> {
         "Clone" => clone,
 
         // std::cmp
-        // "Eq"
+        // "Eq" => is a marker trait, #[derive(Eq)] instead.
         "Ord" => |f| ord_shaped(f, &pq!(::core::cmp::Ord), &pq!(cmp)),
         "PartialEq" => |f| ord_shaped(f, &pq!(::core::cmp::PartialEq), &pq!(eq)),
         "PartialOrd" => partial_ord,
@@ -36,7 +43,7 @@ pub(crate) fn get_trait_fn(key: &str) -> Option<GenFn> {
         "Default" => default,
 
         // std::error
-        // "Error" => generate Error::source?
+        // "Error" => Generate `source()`?
 
         // std::fmt
         "Binary" => |f| debug_shaped(f, &pq!(::core::fmt::Binary)),
@@ -57,21 +64,28 @@ pub(crate) fn get_trait_fn(key: &str) -> Option<GenFn> {
         // std::hash
         // "BuildHasher"?
         "Hash" => hash,
-        // "Hasher" => non-starter; requires two functions.
+        // "Hasher" => Requires two functions to be implemented.
 
         // std::io
         // Read/Seek are single-function traits, but BufRead/Write require two. Probably best to
-        // avoid std::io completely.
+        // avoid std::io completely. Also namespace clash with std::fmt::Write.
 
         // std::iterator
         // DoubleEndedIterator::next_back
         // ExactSizeIterator::len
         // Extend::extend // fn has a generic type
         // "FromIterator" => from_iterator, // fn is rather complex
+        // "FusedIterator" => is a marker trait.
         "IntoIterator" => into_iterator,
         "Iterator" => iterator,
         // Product::product // fn has a generic type
+        // Step => Requires several functions to be implemented.
         // Sum::sum // fn has a generic type
+        // TrustedLen // marker trait
+        // TrustedStep // marker trait
+
+        // std::net
+        // "ToSocketAddrs" => doable but does it make sense?
 
         // std::ops
         "Add" => |f| add_shaped(f, &pq!(::core::ops::Add), &pq!(add)),
@@ -85,17 +99,23 @@ pub(crate) fn get_trait_fn(key: &str) -> Option<GenFn> {
         "BitXor" => |f| add_shaped(f, &pq!(::core::ops::BitXor), &pq!(bitxor)),
         "BitXorAssign" =>
             |f| add_assign_shaped(f, &pq!(::core::ops::BitXorAssign), &pq!(bitxor_assign)),
+        // "CoerceUnsigned" => marker trait
         "Deref" => deref,
         "DerefMut" => deref_mut,
+        // "DispatchFromDyn" => marker trait
         "Div" => |f| add_shaped(f, &pq!(::core::ops::Div), &pq!(div)),
         "DivAssign" => |f| add_assign_shaped(f, &pq!(::core::ops::DivAssign), &pq!(div_assign)),
         "Drop" => drop,
+        // "Fn" / "FnMut" / "FnOnce": doable, but are nightly-unstable.
+        // "FromResidual": doable, but is nightly-unstable.
+        // "Generator": possibly doable, but is nightly-unstable.
         "Index" => index,
         "IndexMut" => index_mut,
         "Mul" => |f| add_shaped(f, &pq!(::core::ops::Mul), &pq!(mul)),
         "MulAssign" => |f| add_assign_shaped(f, &pq!(::core::ops::MulAssign), &pq!(mul_assign)),
         "Neg" => |f| neg_shaped(f, &pq!(::core::ops::Neg), &pq!(neg)),
         "Not" => |f| neg_shaped(f, &pq!(::core::ops::Not), &pq!(not)),
+        // "RangeBounds": requires two functions.
         "Rem" => |f| add_shaped(f, &pq!(::core::ops::Rem), &pq!(rem)),
         "RemAssign" => |f| add_assign_shaped(f, &pq!(::core::ops::RemAssign), &pq!(rem_assign)),
         "Shl" => |f| add_shaped(f, &pq!(::core::ops::Shl), &pq!(shl)),
@@ -104,6 +124,7 @@ pub(crate) fn get_trait_fn(key: &str) -> Option<GenFn> {
         "ShrAssign" => |f| add_assign_shaped(f, &pq!(::core::ops::ShrAssign), &pq!(shr_assign)),
         "Sub" => |f| add_shaped(f, &pq!(::core::ops::Sub), &pq!(sub)),
         "SubAssign" => |f| add_assign_shaped(f, &pq!(::core::ops::SubAssign), &pq!(sub_assign)),
+        // "Try" => requires two functions
 
         // std::str
         "FromStr" => from_str,
@@ -136,7 +157,7 @@ fn borrow_shaped(func: GenIn, trait_name: &Path, method_name: &Ident) -> Result<
         derive_span =>
             #extra_attrs
         impl #generics #trait_name <#output> for #input #where_clause {
-            #[inline] fn #method_name (&self) -> &#output {
+             fn #method_name (&self) -> &#output {
                 #to_call(self)
             }
         }
@@ -161,7 +182,7 @@ fn borrow_mut_shaped(func: GenIn, trait_name: &Path, method_name: &Ident) -> Res
         derive_span =>
             #extra_attrs
         impl #generics #trait_name <#output> for #input #where_clause {
-            #[inline] fn #method_name (&mut self) -> &mut #output {
+             fn #method_name (&mut self) -> &mut #output {
                 #to_call(self)
             }
         }
@@ -185,9 +206,9 @@ fn to_owned(func: GenIn) -> Result<TokenStream> {
     Ok(quote_spanned! {
         derive_span =>
             #extra_attrs
-        impl #generics ::zoet::traits::ToOwned for #input #where_clause {
+        impl #generics ::zoet::__alloc::borrow::ToOwned for #input #where_clause {
             type Owned = #output;
-            #[inline] fn to_owned(&self) -> Self::Owned {
+             fn to_owned(&self) -> Self::Owned {
                 #to_call(self)
             }
         }
@@ -212,7 +233,7 @@ fn clone(func: GenIn) -> Result<TokenStream> {
         derive_span =>
             #extra_attrs
         impl #generics ::core::clone::Clone for #input #where_clause {
-            #[inline] fn clone(&self) -> #output {
+             fn clone(&self) -> #output {
                 #to_call(self)
             }
         }
@@ -241,7 +262,7 @@ fn ord_shaped(func: GenIn, trait_name: &Path, method_name: &Ident) -> Result<Tok
         derive_span =>
             #extra_attrs
         impl #generics #trait_name for #lhs #where_clause {
-            #[inline] fn #method_name(&self, other: &#rhs) -> #output {
+             fn #method_name(&self, other: &#rhs) -> #output {
                 #to_call(self, other)
             }
         }
@@ -270,7 +291,7 @@ fn partial_ord(func: GenIn) -> Result<TokenStream> {
             derive_span =>
                 #extra_attrs
             impl #generics ::core::cmp::PartialOrd for #lhs #where_clause {
-                #[inline] fn partial_cmp(&self, other: &#rhs) -> ::core::option::Option<#output> {
+                 fn partial_cmp(&self, other: &#rhs) -> ::core::option::Option<#output> {
                     #to_call(self, other)
                 }
             }
@@ -295,7 +316,7 @@ fn partial_ord(func: GenIn) -> Result<TokenStream> {
             derive_span =>
                 #extra_attrs
             impl #generics ::core::cmp::PartialOrd for #lhs #where_clause {
-                #[inline] fn partial_cmp(&self, other: &#rhs) -> ::core::option::Option<#output> {
+                 fn partial_cmp(&self, other: &#rhs) -> ::core::option::Option<#output> {
                     ::core::option::Option::Some(#to_call(self, other))
                 }
             }
@@ -321,7 +342,7 @@ fn from(func: GenIn) -> Result<TokenStream> {
         derive_span =>
             #extra_attrs
         impl #generics ::core::convert::From<#input> for #output #where_clause {
-            #[inline] fn from(value: #input) -> Self {
+             fn from(value: #input) -> Self {
                 #to_call(value)
             }
         }
@@ -346,7 +367,7 @@ fn into(func: GenIn) -> Result<TokenStream> {
         derive_span =>
             #extra_attrs
         impl #generics ::core::convert::Into<#output> for #input #where_clause {
-            #[inline] fn into(self) -> #output {
+             fn into(self) -> #output {
                 #to_call(self)
             }
         }
@@ -373,7 +394,7 @@ fn try_from(func: GenIn) -> Result<TokenStream> {
             #extra_attrs
         impl #generics ::core::convert::TryFrom<#input> for #output #where_clause {
             type Error = #err;
-            #[inline] fn try_from(value: #input) -> ::core::result::Result<Self, Self::Error> {
+             fn try_from(value: #input) -> ::core::result::Result<Self, Self::Error> {
                 #to_call(value)
             }
         }
@@ -399,7 +420,7 @@ fn try_into(func: GenIn) -> Result<TokenStream> {
             #extra_attrs
         impl #generics ::core::convert::TryInto<#output> for #input #where_clause {
             type Error = #err;
-            #[inline] fn try_into(self) -> ::core::result::Result<#output, Self::Error> {
+             fn try_into(self) -> ::core::result::Result<#output, Self::Error> {
                 #to_call(self)
             }
         }
@@ -424,7 +445,7 @@ fn default(func: GenIn) -> Result<TokenStream> {
         derive_span =>
             #extra_attrs
         impl #generics ::core::default::Default for #output #where_clause {
-            #[inline] fn default() -> Self {
+             fn default() -> Self {
                 #to_call()
             }
         }
@@ -453,7 +474,7 @@ fn debug_shaped(func: GenIn, trait_name: &Path) -> Result<TokenStream> {
         derive_span =>
             #extra_attrs
         impl #generics #trait_name for #obj #where_clause {
-            #[inline] fn fmt(&self, f: &mut #formatter) -> #output {
+             fn fmt(&self, f: &mut #formatter) -> #output {
                 #to_call(self, f)
             }
         }
@@ -482,7 +503,7 @@ fn write(func: GenIn) -> Result<TokenStream> {
         derive_span =>
             #extra_attrs
         impl #generics ::core::fmt::Write for #obj #where_clause {
-            #[inline] fn write_str(&mut self, s: &#str) -> #output {
+             fn write_str(&mut self, s: &#str) -> #output {
                 #to_call(self, s)
             }
         }
@@ -513,7 +534,7 @@ fn future(func: GenIn) -> Result<TokenStream> {
             #extra_attrs
         impl #generics ::core::future::Future for #obj #where_clause {
             type Output = #output;
-            #[inline]
+
             fn poll(
                 self: ::core::pin::Pin<&mut Self>,
                 cx: &mut ::core::task::Context
@@ -547,8 +568,8 @@ fn hash(func: GenIn) -> Result<TokenStream> {
         derive_span =>
             #extra_attrs
         impl #generics ::core::hash::Hash for #obj #where_clause {
-            #[inline] fn hash<H: ::core::hash::Hasher>(&self, state: &mut H) {
-                #to_call(self, state)
+             fn hash<H: ::core::hash::Hasher>(&self, state: &mut H) {
+                #to_call(self, state);
             }
         }
     })
@@ -576,7 +597,7 @@ fn into_iterator(func: GenIn) -> Result<TokenStream> {
         impl #generics ::core::iter::IntoIterator for #input #where_clause {
             type IntoIter = #output;
             type Item = <Self::IntoIter as ::core::iter::Iterator>::Item;
-            #[inline] fn into_iter(self) -> Self::IntoIter {
+             fn into_iter(self) -> Self::IntoIter {
                 #to_call(self)
             }
         }
@@ -603,7 +624,7 @@ fn iterator(func: GenIn) -> Result<TokenStream> {
             #extra_attrs
         impl #generics ::core::iter::Iterator for #input #where_clause {
             type Item = #output;
-            #[inline] fn next(&mut self) -> Option<Self::Item> {
+             fn next(&mut self) -> Option<Self::Item> {
                 #to_call(self)
             }
         }
@@ -636,7 +657,7 @@ fn add_shaped(func: GenIn, trait_name: &Path, method_name: &Ident) -> Result<Tok
             #extra_attrs
         impl #generics #trait_name<#rhs> for #lhs #where_clause {
             type Output = #output;
-            #[inline] fn #method_name(self, rhs: #rhs) -> Self::Output {
+             fn #method_name(self, rhs: #rhs) -> Self::Output {
                 #to_call(self, rhs)
             }
         }
@@ -666,7 +687,7 @@ fn add_from_add_assign_shaped(
             #extra_attrs
         impl #generics #trait_name<#rhs> for #lhs #where_clause {
             type Output = #lhs;
-            #[inline] fn #method_name(mut self, rhs: #rhs) -> #lhs {
+             fn #method_name(mut self, rhs: #rhs) -> #lhs {
                 #to_call(&mut self, rhs) ; self
             }
         }
@@ -692,8 +713,8 @@ fn add_assign_shaped(func: GenIn, trait_name: &Path, method_name: &Ident) -> Res
         derive_span =>
             #extra_attrs
         impl #generics #trait_name<#rhs> for #lhs #where_clause {
-            #[inline] fn #method_name(&mut self, rhs: #rhs) {
-                #to_call(self, rhs)
+             fn #method_name(&mut self, rhs: #rhs) {
+                #to_call(self, rhs);
             }
         }
     })
@@ -717,8 +738,8 @@ fn drop(func: GenIn) -> Result<TokenStream> {
         derive_span =>
             #extra_attrs
         impl #generics ::core::ops::Drop for #input #where_clause {
-            #[inline] fn drop(&mut self) {
-                #to_call(self)
+             fn drop(&mut self) {
+                #to_call(self);
             }
         }
     })
@@ -743,7 +764,7 @@ fn index(func: GenIn) -> Result<TokenStream> {
             #extra_attrs
         impl #generics ::core::ops::Index<#idx> for #coll #where_clause {
             type Output = #output;
-            #[inline] fn index(&self, index: #idx) -> &Self::Output {
+             fn index(&self, index: #idx) -> &Self::Output {
                 #to_call(self, index)
             }
         }
@@ -768,7 +789,7 @@ fn index_mut(func: GenIn) -> Result<TokenStream> {
         derive_span =>
             #extra_attrs
         impl #generics ::core::ops::IndexMut<#idx> for #coll #where_clause {
-            #[inline] fn index_mut(&mut self, index: #idx) -> &mut Self::Output {
+             fn index_mut(&mut self, index: #idx) -> &mut Self::Output {
                 #to_call(self, index)
             }
         }
@@ -794,7 +815,7 @@ fn neg_shaped(func: GenIn, trait_name: &Path, method_name: &Ident) -> Result<Tok
             #extra_attrs
         impl #generics #trait_name for #input #where_clause {
             type Output = #output;
-            #[inline] fn #method_name(self) -> Self::Output {
+             fn #method_name(self) -> Self::Output {
                 #to_call(self)
             }
         }
@@ -820,7 +841,7 @@ fn deref(func: GenIn) -> Result<TokenStream> {
             #extra_attrs
         impl #generics ::core::ops::Deref for #input #where_clause {
             type Target = #output;
-            #[inline] fn deref(&self) -> &Self::Target {
+             fn deref(&self) -> &Self::Target {
                 #to_call(self)
             }
         }
@@ -845,7 +866,7 @@ fn deref_mut(func: GenIn) -> Result<TokenStream> {
         derive_span =>
             #extra_attrs
         impl #generics ::core::ops::DerefMut for #input #where_clause {
-            #[inline] fn deref_mut(&mut self) -> &mut #output {
+             fn deref_mut(&mut self) -> &mut #output {
                 #to_call(self)
             }
         }
@@ -872,7 +893,7 @@ fn from_str(func: GenIn) -> Result<TokenStream> {
             #extra_attrs
         impl #generics ::core::str::FromStr for #output #where_clause {
             type Err = #err;
-            #[inline] fn from_str(s: #input) -> ::core::result::Result<Self, Self::Err> {
+             fn from_str(s: #input) -> ::core::result::Result<Self, Self::Err> {
                 #to_call(s)
             }
         }
@@ -897,8 +918,8 @@ fn to_string(func: GenIn) -> Result<TokenStream> {
     Ok(quote_spanned! {
         derive_span =>
             #extra_attrs
-        impl #generics ::zoet::traits::ToString for #input #where_clause {
-            #[inline] fn to_string(&self) -> #output {
+        impl #generics ::zoet::__alloc::string::ToString for #input #where_clause {
+             fn to_string(&self) -> #output {
                 #to_call(self)
             }
         }

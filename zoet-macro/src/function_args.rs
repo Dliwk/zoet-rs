@@ -135,9 +135,7 @@ impl FunctionMeta<'_> {
         if let Some((ident, boxed)) = self.unwrap_param_type(ty)? {
             match (ident.to_string().as_str(), &*boxed) {
                 ("Result", [ref a, ref b]) => return Ok((a.clone(), b.clone())),
-                ("Result", [ref a]) | ("Fallible", [ref a]) => {
-                    return Ok((a.clone(), parse_quote! { Error }));
-                }
+                ("Result" | "Fallible", [ref a]) => return Ok((a.clone(), parse_quote! { Error })),
                 _ => (),
             }
         }
@@ -260,6 +258,7 @@ impl<'a, O> FunctionArgs<'a, Box<[WithTokens<'a, Type>]>, O> {
             }
         }
     }
+
     pub(crate) fn nullary(self) -> Result<FunctionArgs<'a, (), O>> {
         if self.input.is_empty() {
             Ok(self.with_input(()))

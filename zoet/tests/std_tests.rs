@@ -16,7 +16,7 @@ impl Foo {
     }
 
     #[zoet(ToString)]
-    fn to_string(&self) -> String {
+    fn zoet_to_string(&self) -> String {
         self.0.to_owned()
     }
 }

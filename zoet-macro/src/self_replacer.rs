@@ -26,7 +26,7 @@ impl<'a> SelfReplacer<'a> {
                 path: ref self_path,
             }) = *self.self_ty
             {
-                *path = self_path.clone()
+                *path = self_path.clone();
             } else {
                 // self.diagnostics.push(
                 //     Diagnostic::spanned(
@@ -63,12 +63,12 @@ impl VisitMut for SelfReplacer<'_> {
 
     fn visit_pat_struct_mut(&mut self, i: &mut PatStruct) {
         self.replace_self_in_path(&mut i.path);
-        visit_pat_struct_mut(self, i)
+        visit_pat_struct_mut(self, i);
     }
 
     fn visit_pat_tuple_struct_mut(&mut self, i: &mut PatTupleStruct) {
         self.replace_self_in_path(&mut i.path);
-        visit_pat_tuple_struct_mut(self, i)
+        visit_pat_tuple_struct_mut(self, i);
     }
 
     fn visit_fn_arg_mut(&mut self, i: &mut FnArg) {
@@ -92,9 +92,9 @@ impl VisitMut for SelfReplacer<'_> {
                     quote_spanned!( span => #(#attrs)* self: #and #lifetime #mutability #self_ty ),
                 ),
             }
-            .expect_or_abort("Mis-interpolated quote!(); please report a bug")
+            .expect_or_abort("Mis-interpolated quote!(); please report a bug");
         } else {
-            visit_fn_arg_mut(self, i)
+            visit_fn_arg_mut(self, i);
         }
     }
 
@@ -105,10 +105,11 @@ impl VisitMut for SelfReplacer<'_> {
 
 #[test]
 fn test_self_replacer() -> Result<()> {
+#![allow(clippy::panic_in_result_fn)]
     use quote::{quote, ToTokens};
     use syn::*;
 
-    let transformations = vec![
+    let transformations = [
         (
             quote! { fn testing_testing_one(self) -> Self {} },
             quote! { fn testing_testing_one(self: RealSelf) -> RealSelf {} },
@@ -140,21 +141,21 @@ fn test_self_replacer() -> Result<()> {
             quote! { fn seven(Self(x, y) : Self ) {} },
             quote! { fn seven(RealSelf(x, y) : RealSelf ) {} },
         ),
-        /* (
-         *     quote! {fn inner(self) { struct Foo; impl Foo { fn new() -> Self { Self } } }},
-         *     quote! {fn inner(self: Self) { struct Foo; impl Foo { fn new() -> Self { Self } } }},
-         * ), */
+        // (
+        //     quote! {fn inner(self) { struct Foo; impl Foo { fn new() -> Self { Self } } }},
+        //     quote! {fn inner(self: Self) { struct Foo; impl Foo { fn new() -> Self { Self } } }},
+        // ),
     ];
 
-    let self_ty = &parse2::<Type>(quote! { RealSelf }).unwrap();
+    let self_ty = &parse2::<Type>(quote! { RealSelf })?;
 
-    for (from, to) in transformations.into_iter() {
+    for (from, to) in IntoIterator::into_iter(transformations) {
         let from_text = from.clone().to_string();
         let to_text = to.clone().to_string();
 
-        let from_ast = parse2::<Item>(from).unwrap();
+        let from_ast = parse2::<Item>(from)?;
         // dbg! { &from_ast };
-        let to_ast = parse2::<Item>(to).unwrap();
+        let to_ast = parse2::<Item>(to)?;
         // dbg! { &to_ast };
         let mut sr = SelfReplacer::new(self_ty);
         let mut got_ast = from_ast.clone();

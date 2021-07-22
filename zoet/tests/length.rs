@@ -53,13 +53,18 @@ impl Length {
 
     // ... but it doesn't work if the output type is not the input type.
     #[zoet(Mul)]
-    fn mul_self(self, other: Self) -> f64 {
-        self.0 * other.0
+    fn swapped_mul(lhs: f64, rhs: Self) -> Self {
+        rhs * lhs
     }
 
     #[zoet(Div)]
-    fn div_self(self, other: Self) -> f64 {
-        self.0 / other.0
+    fn swapped_div(lhs: f64, rhs: Self) -> Self {
+        Self(lhs / rhs.0)
+    }
+
+    #[zoet(Div)]
+    fn div_by_self(self, rhs: Self) -> f64 {
+        self.0 / rhs.0
     }
 
     #[zoet(Neg)]
@@ -128,7 +133,6 @@ fn main() {
 
     assert_eq!(length + length, Length(6.0));
     assert_eq!(length + length, Length(0.0));
-    assert_eq!(length * length, 9.0);
     assert_eq!(length / length, 1.0);
     assert_eq!(length * 4.0, Length(12.0));
     assert_eq!(length / 4.0, Length(0.75));

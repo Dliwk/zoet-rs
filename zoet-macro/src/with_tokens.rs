@@ -59,8 +59,7 @@ impl<'a> WithTokens<'a, &'a ReturnType> {
     pub(crate) fn from_return_type(
         return_type: &'a ReturnType,
         self_ty: Option<&'a Type>,
-    ) -> WithTokens<'a, ReturnType>
-    {
+    ) -> WithTokens<'a, ReturnType> {
         let to_tokens = return_type;
         let mut value = return_type.clone();
 
@@ -68,7 +67,7 @@ impl<'a> WithTokens<'a, &'a ReturnType> {
             SelfReplacer::try_replace_mut(self_ty, &mut value, SelfReplacer::visit_return_type_mut);
         }
 
-        WithTokens { to_tokens, value }
+        WithTokens { value, to_tokens }
     }
 }
 
@@ -76,8 +75,7 @@ impl<'a> WithTokens<'a, Type> {
     pub(crate) fn from_fn_arg(
         fn_arg: &'a FnArg,
         self_ty: Option<&'a Type>,
-    ) -> WithTokens<'a, Type>
-    {
+    ) -> WithTokens<'a, Type> {
         let to_tokens = fn_arg;
         let mut value = fn_arg.clone();
 
@@ -93,6 +91,6 @@ impl<'a> WithTokens<'a, Type> {
             ),
         };
 
-        WithTokens { to_tokens, value }
+        WithTokens { value, to_tokens }
     }
 }

@@ -76,13 +76,13 @@
 //! * `core::cmp`: `Ord`, `PartialEq`, `PartialOrd`.
 //! * `core::convert`: `AsMut`, `AsRef`, `From`, `Into`, `TryFrom`, `TryInto`.
 //! * `core::default`: `Default`.
-//! * `core::fmt`: `Binary` `Debug` `Display` `LowerExp` `LowerHex` `Octal` `Pointer` `UpperExp`
-//!   `UpperHex`, `Write` (implements `write_str`).
+//! * `core::fmt`: `Binary`, `Debug`, `Display`, `LowerExp`, `LowerHex`, `Octal`, `Pointer`,
+//! `UpperExp`, `UpperHex`, `Write` (implements `write_str`).
 //! * `core::future`: `Future`.
 //! * `core::hash`: `Hash` (implements `hash`).
 //! * `core::iterator`: `IntoIterator`, `Iterator` (implements `next`).
-//! * `core::ops`: `Deref`, `DerefMut`, `Drop`, `Index`, `IndexMut`, plus all arithmetic and bit
-//!   ops and assignment variants such as `Add` and `AddAssign`.
+//! * `core::ops`: `Deref`, `DerefMut`, `Drop`, `Index`, `IndexMut`, plus all arithmetic and bit ops
+//! and assignment variants such as `Add` and `AddAssign`.
 //! * `core::str`: `FromStr`.
 //!
 //! The `alloc` feature (which is enabled by default) also adds these:
@@ -104,47 +104,92 @@
 //!
 //! A suitable impl is emitted which proxies to your function, such as this:
 //!
-//!```
+//! ```
 //! # struct Length(usize);
 //! # impl Length { pub fn new() -> Self { Self(0) } }
-//! #[automatically_derived]
-//! #[allow(unused_qualifications)]
 //! impl ::core::default::Default for Length {
-//!     #[inline]
 //!     fn default() -> Self {
-//!         <Length>::new()
+//!         Length::new()
 //!     }
 //! }
 //! ```
 //!
 //! # Gotchas
 //!
-//! Due to limitations in macro processing, you must add `#[zoet]` to your struct's impl block so
-//! that the self type of its associated functions can be determined. This is obviously not
+//! ## …caused by macro limitations
+//!
+//! Due to limitations in macro processing, you must also add `#[zoet]` to the methods' `impl` block
+//! so that the self type of its associated functions can be determined. This is obviously not
 //! necessary (or possible) for free functions as they don't have a self type.
 //!
-//! Generic parameters on the function and/or its inherent impl are all just accumulated and added
-//! to the trait impl's generic parameters, which does the right thing for the vast majority of
+//! Because macros run before type checking, they only knows the _names_ of the types, and not the
+//! actual types. `zoet` prefers to be liberal and pass through types rather than attempt to parse
+//! them, but needs to unpick the result type used by some traits such as `TryInto` into the success
+//! and error types, or rather, the _names_ of the success and error types. As such, it expects the
+//! result type to be called (or be a path ending in) `Result` or `Fallible`, and if the second
+//! parameter is missing, the identifier `Error` is used. Idiomatic Rust code shouldn't have a
+//! problem with this, but if you have unusual error-handling, you may trip over this.
+//!
+//! ## …caused by trait limitations
+//!
+//! Traits require named lifetimes and cannot use the elided (`'_`) or implicit lifetimes. This
+//! means that if you're using references, you will eventually trip on this. The only fix is to
+//! change your function to use an explicit (`'a`) lifetime. This may cause the
+//! `clippy::needless_lifetimes` lint to warn "explicit lifetimes given in parameter types where
+//! they could be elided (or replaced with `'_` if needed by type declaration)", but it is required
+//! and you'll just have to disable that lint (possibly only on that function).
+//!
+//! Abstract return types, aka "impl Trait in return position" is useful when you have a complex or
+//! un-nameable type that you wish to return. This mainly manifests itself with `Iterator` but also
+//! turns up in some `Future`s and other places. It is thus natural to want to write code like this:
+//!
+//! ```ignore
+//! #[zoet(IntoIterator)]
+//! fn iter<'a>(&'a self) -> impl Iterator<Item = &'a T> {
+//!     self.as_slice().iter()
+//! }
+//! ```
+//!
+//! Unfortunately, this will not work because _[`impl Trait` can only appear as a parameter or
+//! return type of a free or inherent function. It cannot appear inside implementations of traits,
+//! nor can it be the type of a let binding or appear inside a type
+//! alias.](https://doc.rust-lang.org/nightly/reference/types/impl-trait.html#limitations)_`zoet`
+//! copies the function return type `impl Iterator<Item = &'a T>` into the `IntoIter` type inside
+//! the `IntoIterator` trait, which is not allowed. A nightly compiler will suggest you "add
+//! `#![feature(min_type_alias_impl_trait)]`", and if you are happy to be limited to nightly (until
+//! such time as this feature is stabilised) then that's that. Otherwise, you are going to have to
+//! write a concrete type:
+//!
+//! ```ignore
+//! #[zoet(IntoIterator)]
+//!     fn iter<'a>(&'a self) -> slice::Iter<'a, T> {
+//!     self.as_slice().iter()
+//! }
+//! ```
+//!
+//! Unfortunately, if you have a complex iterator pipeline, you may not be able to (easily) name the
+//! type. This will involve a fairly hairy refactor and/or just giving up and using `Box<dyn
+//! Iterator…>`. There is nothing `zoet` can do about this, as this is a Rust limitation which you
+//! will hit even if you do not use `zoet`.
+//!
+//! ## …caused by `zoet`'s design
+//!
+//! Generic parameters on the function and/or its inherent `impl` are all just accumulated and added
+//! to the trait `impl`'s generic parameters, which does the right thing for the vast majority of
 //! traits. However, where a trait's function is itself generic, `zoet` isn't (yet) smart enough to
 //! figure out which of the generic parameter is for the function. As a perfectly good workaround,
 //! use an `impl Trait` parameter instead. So while `Hash` defines its single method as `fn hash<H:
 //! Hasher>(&self, state: &mut H)`, your function needs to be something like `fn hash(&self, state:
 //! &mut impl Hasher)`.
 //!
-//! Because macros run before type checking, they only knows the _names_ of the types, and not the
-//! actual types. `zoet` prefers to be liberal and pass through types rather than attempt to parse
-//! them, but we need to unpick the result type used by some traits such as `TryInto` into the
-//! success and error types, or rather, the _names_ of the success and error types. As such, it
-//! expects the result type to be called (or be a path ending in) `Result` or `Fallible`, and if
-//! the second parameter is missing, the identifier `Error` is used. Idiomatic Rust code shouldn't
-//! have a problem with this, but if you have unusual error-handling, you may trip over this.
+//! ## …caused by _you_
 //!
 //! While this macro makes it easy to stamp out loads of core traits, don't go crazy but consider
 //! each trait you add and whether there is a more suitable macro to do the job, or indeed whether
 //! that trait should be added. The example above generates `Default` based on `new()`, but since
 //! that function returns 0 which is the default value anyway, it'd be better to `#derive(Default)`
 //! and implement `new()` in terms of that. Similarly, its `Add` and `AddAssign` trait
-//! implementations just delegating to its field's `Add` and `AddAssign` traits, and the can be
+//! implementations just delegate to its field's `Add` and `AddAssign` traits, and the can be
 //! completely eliminated by using [`derive_more`] and deriving `Add` and `AddAssign` on the struct.
 //! If your struct doesn't satisfy `Borrow`'s invariants, you shouldn't unthinkingly do
 //! `#[zoet(AsRef, Borrow, Deref)]`.
@@ -159,12 +204,8 @@
 #![no_std]
 #![cfg_attr(feature = "unstable-doc-cfg", feature(doc_cfg))]
 
-#[cfg(any(feature = "alloc", doc))] extern crate alloc;
-
+#[cfg(any(feature = "alloc", doc))]
 #[doc(hidden)]
-#[cfg(feature = "alloc")]
-pub mod traits {
-    pub use ::alloc::{borrow::ToOwned, string::ToString};
-}
+pub extern crate alloc as __alloc;
 
 pub use zoet_macro::zoet;
