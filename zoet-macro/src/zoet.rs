@@ -31,8 +31,8 @@ fn trait_impl_from_fn(
     let extra_attrs = quote! {
         #( #copied_attrs )*
         // #[allow(clippy::pedantic)]
-        #[automatically_derived]
-        #[allow(unused_qualifications)]
+        //#[automatically_derived]
+        //#[allow(unused_qualifications)]
     };
 
     let mut is_empty = true;

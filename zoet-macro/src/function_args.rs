@@ -102,8 +102,7 @@ impl FunctionMeta<'_> {
     fn unwrap_param_type<'a>(
         &self,
         ty: &'a WithTokens<'a, Type>,
-    ) -> Result<Option<(&'a Ident, Box<[Type]>)>>
-    {
+    ) -> Result<Option<(&'a Ident, Box<[Type]>)>> {
         if let Type::Path(TypePath {
             qself: None,
             ref path,
@@ -151,13 +150,15 @@ impl FunctionMeta<'_> {
         )
     }
 
-    fn unwrap_option<'a>(&self, ty: &'a WithTokens<'a, Type>, name: &str) -> Result<Type> {
+    fn unwrap<'a>(&self, ty: &'a WithTokens<'a, Type>, wrapper: &str, name: &str) -> Result<Type> {
         if let Some((ident, boxed)) = self.unwrap_param_type(ty)? {
-            if let ("Option", [ref a]) = (ident.to_string().as_str(), &*boxed) {
-                return Ok(a.clone());
+            if let (w, [ref a]) = (ident.to_string().as_str(), &*boxed) {
+                if w == wrapper {
+                    return Ok(a.clone());
+                }
             }
         }
-        self.result(ty, &format!("{} must be `Option<_>`", name))
+        self.result(ty, &format!("{} must be `{}<_>`", name, wrapper))
     }
 }
 
@@ -246,6 +247,19 @@ impl<'a, O> FunctionArgs<'a, Box<[WithTokens<'a, Type>]>, O> {
         }
     }
 
+    pub(crate) fn unwrap_param(mut self, index: usize, wrapper: &str) -> Result<Self> {
+        match self.input.get_mut(index) {
+            None => Err(self.meta.diagnostic_error(
+                self.meta.signature,
+                &format!("{} is missing", Self::param_name(index)),
+            )),
+            Some(param) => {
+                let result = self.meta.unwrap(param, wrapper, &Self::param_name(index))?;
+                param.value = result;
+                Ok(self)
+            }
+        }
+    }
     pub(crate) fn nullary(self) -> Result<FunctionArgs<'a, (), O>> {
         if self.input.is_empty() {
             Ok(self.with_input(()))
@@ -264,7 +278,7 @@ impl<'a, O> FunctionArgs<'a, Box<[WithTokens<'a, Type>]>, O> {
         } = self;
 
         <Box<[_; 1]>>::try_from(input)
-            .map_err(|_| {
+            .map_err(|_box| {
                 meta.diagnostic_error(meta.signature, &"function should take one parameter")
             })
             .map(|boxed| match *boxed {
@@ -284,7 +298,7 @@ impl<'a, O> FunctionArgs<'a, Box<[WithTokens<'a, Type>]>, O> {
         } = self;
 
         <Box<[_; 2]>>::try_from(input)
-            .map_err(|_| {
+            .map_err(|_box| {
                 meta.diagnostic_error(meta.signature, &"function should take two parameters")
             })
             .map(|boxed| match *boxed {
@@ -356,12 +370,12 @@ impl<'a, I> FunctionArgs<'a, I, WithTokens<'a, ReturnType>> {
         Ok(fa.with_output(tys))
     }
 
-    /// Checks the function returns an Option, i.e. is `fn(...) -> Option<U>;`, and sets the output
-    /// to `A`.
+    /// Checks the function returns a wrapped type, i.e. is `fn(...) -> #wrapper<U>;`, and sets the
+    /// output to `A`.
 
-    pub(crate) fn unwrap_option_return(self) -> Result<FunctionArgs<'a, I, Type>> {
+    pub(crate) fn unwrap_return(self, wrapper: &str) -> Result<FunctionArgs<'a, I, Type>> {
         let fa = self.try_return()?;
-        let tys = fa.meta.unwrap_option(&fa.output, "return type")?;
+        let tys = fa.meta.unwrap(&fa.output, wrapper, "return type")?;
         Ok(fa.with_output(tys))
     }
 }

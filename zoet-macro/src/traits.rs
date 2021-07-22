@@ -39,13 +39,20 @@ pub(crate) fn get_trait_fn(key: &str) -> Option<GenFn> {
         // "Error" => generate Error::source?
 
         // std::fmt
-        // Probably silly to do Binary/LowerExp/LowerHex etc.
+        "Binary" => |f| debug_shaped(f, &pq!(::core::fmt::Binary)),
         "Debug" => |f| debug_shaped(f, &pq!(::core::fmt::Debug)),
         "Display" => |f| debug_shaped(f, &pq!(::core::fmt::Display)),
+        "LowerExp" => |f| debug_shaped(f, &pq!(::core::fmt::LowerExp)),
+        "LowerHex" => |f| debug_shaped(f, &pq!(::core::fmt::LowerHex)),
+        "Octal" => |f| debug_shaped(f, &pq!(::core::fmt::Octal)),
+        "Pointer" => |f| debug_shaped(f, &pq!(::core::fmt::Pointer)),
+        "UpperExp" => |f| debug_shaped(f, &pq!(::core::fmt::UpperExp)),
+        "UpperHex" => |f| debug_shaped(f, &pq!(::core::fmt::UpperHex)),
         "Write" => write,
 
         // std::future
-        // "Future" => generate Future::poll?
+        "Future" => future,
+        // "IntoFuture" ?
 
         // std::hash
         // "BuildHasher"?
@@ -254,7 +261,7 @@ fn partial_ord(func: GenIn) -> Result<TokenStream> {
                 extra_attrs,
                 ..
             },
-    }) = filtered.clone().unwrap_option_return()
+    }) = filtered.clone().unwrap_return("Option")
     {
         // The function returns Option<_>, so is assumed to be compatible with
         // PartialOrd::partial_ord.
@@ -481,6 +488,42 @@ fn write(func: GenIn) -> Result<TokenStream> {
         }
     })
 }
+
+/// `fn(Poll<&mut A>, &mut Context) -> T`
+fn future(func: GenIn) -> Result<TokenStream> {
+    let FunctionArgs {
+        input: (obj, _),
+        output,
+        meta:
+            FunctionMeta {
+                derive_span,
+                generics,
+                to_call,
+                extra_attrs,
+                ..
+            },
+    } = func
+        .unwrap_param(0, "Pin")?
+        .unwrap_mut_param(0)?
+        .binary()?
+        .unwrap_return("Poll")?;
+    let where_clause = &generics.where_clause;
+    Ok(quote_spanned! {
+        derive_span =>
+            #extra_attrs
+        impl #generics ::core::future::Future for #obj #where_clause {
+            type Output = #output;
+            #[inline]
+            fn poll(
+                self: ::core::pin::Pin<&mut Self>,
+                cx: &mut ::core::task::Context
+            ) -> ::core::task::Poll<Self::Output> {
+                #to_call(self, cx)
+            }
+        }
+    })
+}
+
 /// (Signature is particularly trait-specific.)
 fn hash(func: GenIn) -> Result<TokenStream> {
     let FunctionArgs {
@@ -510,44 +553,6 @@ fn hash(func: GenIn) -> Result<TokenStream> {
         }
     })
 }
-
-/*
-/// (Signature is frightful)
-// TODO: this generates bad code. We need to add support for stripping the "impl" from the function
-// signature and emitting extra generics magic.
-fn from_iterator(func: GenIn) -> Result<TokenStream> {
-    let FunctionArgs {
-        input,
-        output,
-        meta:
-            FunctionMeta {
-                derive_span,
-                generics,
-                to_call,
-                extra_attrs,
-                ..
-            },
-    } = func.unary()?.has_return()?;
-
-    let where_clause = &generics.where_clause;
-
-    Ok(quote_spanned! {
-        derive_span =>
-            compile_error!("TODO: how did you even get to this code?");
-            #extra_attrs
-        impl <T /*from caller */, __ZoetImpl: IntoIterator<Item = T> /* from us */>
-        // #generics
-            ::core::iter::FromIterator<__ZoetImpl::Item> for #output
-        {
-            #[inline] fn from_iter<__ZoetT>(
-                iter: __ZoetT
-            ) -> Self {
-                #to_call(iter)
-            }
-        }
-    })
-}
-*/
 
 /// `fn(A) -> T` ⇛
 /// `impl Trait for A { type Assoc1 = Out; type Assoc2 = <Out as Trait>::Assoc2; fn op(self) -> Out }`
@@ -591,7 +596,7 @@ fn iterator(func: GenIn) -> Result<TokenStream> {
                 extra_attrs,
                 ..
             },
-    } = func.unwrap_mut_param(0)?.unary()?.unwrap_option_return()?;
+    } = func.unwrap_mut_param(0)?.unary()?.unwrap_return("Option")?;
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
         derive_span =>

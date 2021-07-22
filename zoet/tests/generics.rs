@@ -37,7 +37,7 @@ fn len_default<I: Default>() -> Length<I> {
 fn test() {
     let a = Length { value: 123 };
     let b = Length::from(123);
-    let _d = <Length::<u128>>::default();
+    let _d = <Length<u128>>::default();
     let mut h = std::collections::HashMap::<_, _>::new();
     h.insert(a, b);
 }
