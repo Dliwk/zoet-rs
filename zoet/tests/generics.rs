@@ -1,7 +1,7 @@
 use core::hash::{Hash, Hasher};
 use zoet::zoet;
 
-#[derive(Eq, PartialEq)]
+#[derive(Eq)]
 struct Length<I> {
     value: I,
 }
@@ -17,11 +17,15 @@ impl<I> Length<I> {
 
     // not-so-easy generics
 
+    #[zoet(PartialEq)]
+    fn eq(&self, other: &Self) -> bool
+    where I: PartialEq {
+        self.value == other.value
+    }
+
     #[zoet(Hash)]
     fn hash(&self, state: &mut impl Hasher)
-    where
-        I: Hash,
-    {
+    where I: Hash {
         self.value.hash(state)
     }
 }

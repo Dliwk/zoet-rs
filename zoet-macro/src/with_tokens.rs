@@ -8,7 +8,7 @@ use crate::self_replacer::*;
 use core::{fmt, ops::Deref};
 use proc_macro2::TokenStream;
 use quote::ToTokens;
-use syn::{visit_mut::VisitMut, FnArg, ReturnType, Type};
+use syn::{fold::Fold, FnArg, ReturnType, Type};
 
 /// Processed data and its source tokens.
 #[derive(Clone, Copy)]
@@ -59,16 +59,15 @@ impl<'a> WithTokens<'a, &'a ReturnType> {
     pub(crate) fn from_return_type(
         return_type: &'a ReturnType,
         self_ty: Option<&'a Type>,
-    ) -> WithTokens<'a, ReturnType>
-    {
+    ) -> WithTokens<'a, ReturnType> {
         let to_tokens = return_type;
         let mut value = return_type.clone();
 
         if let Some(self_ty) = self_ty {
-            SelfReplacer::try_replace_mut(self_ty, &mut value, SelfReplacer::visit_return_type_mut);
+            value = SelfReplacer::new(self_ty).fold_return_type(value);
         }
 
-        WithTokens { to_tokens, value }
+        WithTokens { value, to_tokens }
     }
 }
 
@@ -76,13 +75,12 @@ impl<'a> WithTokens<'a, Type> {
     pub(crate) fn from_fn_arg(
         fn_arg: &'a FnArg,
         self_ty: Option<&'a Type>,
-    ) -> WithTokens<'a, Type>
-    {
+    ) -> WithTokens<'a, Type> {
         let to_tokens = fn_arg;
         let mut value = fn_arg.clone();
 
         if let Some(self_ty) = self_ty {
-            SelfReplacer::try_replace_mut(self_ty, &mut value, SelfReplacer::visit_fn_arg_mut);
+            value = SelfReplacer::new(self_ty).fold_fn_arg(value);
         }
 
         let value = match value {
@@ -93,6 +91,6 @@ impl<'a> WithTokens<'a, Type> {
             ),
         };
 
-        WithTokens { to_tokens, value }
+        WithTokens { value, to_tokens }
     }
 }

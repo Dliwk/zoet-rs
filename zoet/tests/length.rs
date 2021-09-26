@@ -22,17 +22,21 @@ impl Length {
         Self(self.0)
     }
 
-    // Can either implement an op_assign and let both Op and OpAssign be implemented in terms of
-    // it...:
-    #[zoet(Add, AddAssign)]
+    #[zoet(Add)]
+    fn add(self, other: Self) -> Self {
+        Self(self.0 + other.0)
+    }
+
+    #[zoet(AddAssign)]
     fn add_assign(&mut self, other: Self) {
         self.0 += other.0
     }
 
-    // ... or they can be implemented independently:
+    // Test that `mut self` works.
     #[zoet(Sub)]
-    fn sub(self, other: Self) -> Self {
-        Self(self.0 - other.0)
+    fn sub(mut self, other: Self) -> Self {
+        self.0 += other.0;
+        self
     }
 
     #[zoet(SubAssign)]
@@ -40,7 +44,8 @@ impl Length {
         self.0 -= other.0
     }
 
-    // both-at-once is easier...
+    // Can either implement an op_assign and let both Op and OpAssign be implemented in terms of
+    // it, which is usually easier.
     #[zoet(Mul, MulAssign)]
     fn mul_assign(&mut self, other: f64) {
         self.0 *= other
@@ -53,13 +58,18 @@ impl Length {
 
     // ... but it doesn't work if the output type is not the input type.
     #[zoet(Mul)]
-    fn mul_self(self, other: Self) -> f64 {
-        self.0 * other.0
+    fn swapped_mul(lhs: f64, rhs: Self) -> Self {
+        rhs * lhs
     }
 
     #[zoet(Div)]
-    fn div_self(self, other: Self) -> f64 {
-        self.0 / other.0
+    fn swapped_div(lhs: f64, rhs: Self) -> Self {
+        Self(lhs / rhs.0)
+    }
+
+    #[zoet(Div)]
+    fn div_by_self(self, rhs: Self) -> f64 {
+        self.0 / rhs.0
     }
 
     #[zoet(Neg)]
@@ -109,13 +119,13 @@ impl Length {
     }
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(Eq)]
 struct IntLength(i64);
 
 #[zoet]
 impl IntLength {
     // Test ordering, Ord-style.
-    #[zoet(Ord, PartialOrd)]
+    #[zoet(Ord, PartialEq, PartialOrd)]
     fn partial_cmp(&self, other: &Self) -> Ordering {
         self.0.cmp(&other.0)
     }
@@ -128,7 +138,6 @@ fn main() {
 
     assert_eq!(length + length, Length(6.0));
     assert_eq!(length + length, Length(0.0));
-    assert_eq!(length * length, 9.0);
     assert_eq!(length / length, 1.0);
     assert_eq!(length * 4.0, Length(12.0));
     assert_eq!(length / 4.0, Length(0.75));

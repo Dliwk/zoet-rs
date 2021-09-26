@@ -68,7 +68,7 @@ impl FunctionMeta<'_> {
                 mutability: None,
                 ref elem,
                 ..
-            }) => Ok(*elem.clone()),
+            }) => Ok(elem.as_ref().clone()),
             _ => self.result(
                 ty,
                 &format!(
@@ -87,7 +87,7 @@ impl FunctionMeta<'_> {
                 mutability: Some(_),
                 ref elem,
                 ..
-            }) => Ok(*elem.clone()),
+            }) => Ok(elem.as_ref().clone()),
             _ => self.result(
                 ty,
                 &format!(
@@ -135,9 +135,7 @@ impl FunctionMeta<'_> {
         if let Some((ident, boxed)) = self.unwrap_param_type(ty)? {
             match (ident.to_string().as_str(), &*boxed) {
                 ("Result", [ref a, ref b]) => return Ok((a.clone(), b.clone())),
-                ("Result", [ref a]) | ("Fallible", [ref a]) => {
-                    return Ok((a.clone(), parse_quote! { Error }));
-                }
+                ("Result", [ref a]) => return Ok((a.clone(), parse_quote! { Error })),
                 _ => (),
             }
         }
@@ -260,6 +258,7 @@ impl<'a, O> FunctionArgs<'a, Box<[WithTokens<'a, Type>]>, O> {
             }
         }
     }
+
     pub(crate) fn nullary(self) -> Result<FunctionArgs<'a, (), O>> {
         if self.input.is_empty() {
             Ok(self.with_input(()))
@@ -342,6 +341,18 @@ impl<'a, I> FunctionArgs<'a, I, WithTokens<'a, ReturnType>> {
             ReturnType::Default => Ok(self.with_output(())),
         }
     }
+
+    /*
+    pub(crate) fn any_return(self) -> FunctionArgs<'a, I, Type> {
+        match self.output.value {
+            ReturnType::Type(_, ref ty) => {
+                let ty = ty.as_ref().clone();
+                self.with_output(ty)
+            }
+            ReturnType::Default => self.with_output(parse_quote! {()}),
+        }
+    }
+     */
 
     /// Checks the function returns a reference, i.e. is `fn(...) -> &A;`, and sets the output to
     /// `A`.
