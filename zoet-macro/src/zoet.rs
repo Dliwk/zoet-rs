@@ -1,4 +1,9 @@
-use crate::{function_args::*, prelude::*, traits::*, with_tokens::*};
+use crate::{
+    function_args::{FunctionArgs, FunctionMeta},
+    prelude::*,
+    traits::{get_trait_fn, GenFn},
+    with_tokens::WithTokens,
+};
 use proc_macro2::{Span, TokenStream};
 use quote::{quote, ToTokens};
 use syn::{
@@ -54,6 +59,7 @@ fn trait_impl_from_fn(
                 };
                 match attr_trait_fn(args) {
                     Ok(trait_tokens) => {
+                        // eprintln!("{}", &trait_tokens);
                         for copied_attr in copied_attrs {
                             tokens.extend(copied_attr.into_token_stream());
                         }
@@ -186,11 +192,7 @@ fn trait_fns(
                 Meta::Path(ref value) => value
                     .get_ident()
                     .ok_or_else(|| diagnostic_error!(value, "this is not a valid trait name"))
-                    .and_then(|ident| {
-                        get_trait_fn(ident.to_string().as_str()).ok_or_else(|| {
-                            diagnostic_error!(ident, "this trait name is not recognised")
-                        })
-                    }),
+                    .and_then(|ident| get_trait_fn(ident)),
             },
         };
         (nested_meta.span(), result)

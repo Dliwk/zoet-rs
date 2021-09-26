@@ -8,7 +8,7 @@ core traits as regular methods in your `impl Bar` like lesser languages, this cr
 See the [documentation on crates.io](https://docs.rs/zoet) for the full list of supported
 traits, but here's a taster:
 
-```
+```rust
 use core::cmp::Ordering;
 use zoet::zoet;
 

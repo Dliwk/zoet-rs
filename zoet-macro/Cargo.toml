@@ -1,6 +1,6 @@
 [package]
 name = "zoet-macro"
-version = "0.1.6"
+version = "0.1.7"
 authors = ["Peter Corlett <abuse@cabal.org.uk>"]
 edition = "2018"
 description = "Implementation detail for `#[zoet]` macro"
@@ -10,24 +10,24 @@ keywords = ["macro", "derive", "trait", "boilerplate", "sweet"]
 categories = ["development-tools", "development-tools::procedural-macro-helpers", "no-std", "rust-patterns" ]
 readme = "../README.md"
 
+[features]
+alloc = []
+clippy-insane = []
+nightly = []
+
 [dependencies]
 proc-macro-error = { version = "1.0.4", default-features = false, features = ["syn-error"] }
-proc-macro2 = { version = "1.0.27", default-features = false, features = ["span-locations"] }
+proc-macro2 = { version = "1.0.29", default-features = false, features = ["span-locations"] }
 quote = { version = "1.0.9", default-features = false }
 
 [dependencies.syn]
-version = "1.0.74"
+version = "1.0.76"
 features = [                    # Reason why this feature is needed:
         "extra-traits",         # Debug output in tests.
-        "visit-mut",            # `self_replacer` needs to tree-walk.
+        "fold",                 # `self_replacer` needs to tree-walk.
         "full",                 # for parsing code and not just types.
 ]
 
-[features]
-clippy-insane = []              # enable to have clippy moan extensively
-default = [
-        "clippy-insane"
-]
 
 [lib]
 proc-macro = true

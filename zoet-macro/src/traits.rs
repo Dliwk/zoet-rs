@@ -8,8 +8,41 @@ pub(crate) type GenIn<'a> =
 pub(crate) type GenOut = Result<TokenStream>;
 pub(crate) type GenFn = fn(GenIn) -> GenOut;
 
-pub(crate) fn get_trait_fn(key: &str) -> Option<GenFn> {
-    let func: GenFn = match key {
+pub(crate) fn get_trait_fn(ident: &Ident) -> Result<GenFn> {
+    let key = ident.to_string();
+
+    let has_alloc = || -> Result<bool> {
+        if cfg!(feature = "alloc") {
+            Ok(true)
+        } else {
+            Err(diagnostic_error! {
+                ident, "this trait requires an allocator"
+                    ; help = "enable zoet's `alloc` feature"
+            })
+        }
+    };
+
+    /*
+    let has_nightly = || -> Result<bool> {
+        if cfg!(feature = "nightly") {
+            Ok(true)
+        } else {
+            Err(diagnostic_error! {
+                ident, "this trait requires a nightly compiler"
+                    ; help = "enable zoet's `nightly` feature"
+            })
+        }
+    };
+     */
+
+    let is_marker = || {
+        Err(diagnostic_error! {
+            ident, "this is a marker trait"
+                ; help = "`#[derive({})]` on the struct/enum/union definition instead", key
+        })
+    };
+
+    let func: GenFn = match &*key {
         // std::alloc
         // "Allocator" => Requires two functions to be implemented.
         // "GlobalAlloc" => Requires two functions to be implemented.
@@ -20,15 +53,16 @@ pub(crate) fn get_trait_fn(key: &str) -> Option<GenFn> {
         // std::borrow
         "Borrow" => |f| borrow_shaped(f, &pq!(::core::borrow::Borrow), &pq!(borrow)),
         "BorrowMut" => |f| borrow_mut_shaped(f, &pq!(::core::borrow::BorrowMut), &pq!(borrow_mut)),
-        "ToOwned" => to_owned,
+        "ToOwned" if has_alloc()? => to_owned,
 
         // std::clone
         "Clone" => clone,
 
         // std::cmp
         // "Eq" => is a marker trait, #[derive(Eq)] instead.
-        "Ord" => |f| ord_shaped(f, &pq!(::core::cmp::Ord), &pq!(cmp)),
-        "PartialEq" => |f| ord_shaped(f, &pq!(::core::cmp::PartialEq), &pq!(eq)),
+        "Eq" => return is_marker(),
+        "Ord" => ord,
+        "PartialEq" => partial_eq,
         "PartialOrd" => partial_ord,
 
         // std::convert
@@ -107,6 +141,8 @@ pub(crate) fn get_trait_fn(key: &str) -> Option<GenFn> {
         "DivAssign" => |f| add_assign_shaped(f, &pq!(::core::ops::DivAssign), &pq!(div_assign)),
         "Drop" => drop,
         // "Fn" / "FnMut" / "FnOnce": doable, but are nightly-unstable.
+        //"Fn" => r#fn,
+        // "FnOnce" if has_nightly()? => fn_once,
         // "FromResidual": doable, but is nightly-unstable.
         // "Generator": possibly doable, but is nightly-unstable.
         "Index" => index,
@@ -130,12 +166,16 @@ pub(crate) fn get_trait_fn(key: &str) -> Option<GenFn> {
         "FromStr" => from_str,
 
         // std::string
-        "ToString" => to_string,
+        "ToString" if has_alloc()? => to_string,
 
-        _ => return None,
+        _ =>
+            return Err(diagnostic_error!(
+                ident,
+                "this trait name is not recognised"
+            )),
     };
 
-    Some(func)
+    Ok(func)
 }
 
 /// `fn(&A) -> &T` ⇛ `impl Trait<T> for A { fn op(&self) -> &T }`
@@ -239,65 +279,52 @@ fn clone(func: GenIn) -> Result<TokenStream> {
         }
     })
 }
-/// `fn(&A, &A) -> Struct` ⇛ `impl Trait for A { fn op(&self, other: &Self) -> Struct }` (`Struct` = `Ordering`)
-fn ord_shaped(func: GenIn, trait_name: &Path, method_name: &Ident) -> Result<TokenStream> {
-    let FunctionArgs {
-        input: (lhs, rhs),
-        output,
-        meta:
-            FunctionMeta {
-                derive_span,
-                generics,
-                to_call,
-                extra_attrs,
-                ..
-            },
-    } = func
-        .unwrap_ref_param(0)?
-        .unwrap_ref_param(1)?
-        .binary()?
-        .has_return()?;
-    let where_clause = &generics.where_clause;
-    Ok(quote_spanned! {
-        derive_span =>
-            #extra_attrs
-        impl #generics #trait_name for #lhs #where_clause {
-             fn #method_name(&self, other: &#rhs) -> #output {
-                #to_call(self, other)
-            }
-        }
-    })
+
+// The comparison operators give us a certain amount of grief. It is probably not unreasonable to
+// want to write `#[zoet(PartialEq, Ord, PartialOrd)]` and have the macro generate the right sort of
+// signatures.
+//
+// Ord wants `Fn(T, T) -> Ordering`. None of the signatures below will do, so it's at least easy
+// enough.
+//
+// PartialOrd wants `Fn(T, U) -> Option<Ordering>`. We can also trivially generate that shape from
+// Ord. Thus it needs to look for `Option` and switch implementation.
+//
+// PartialEq wants `Fn(T, U) -> bool`. Again, this can be generated from the other two.
+
+enum CompareShape {
+    // -> Option<_>
+    PartialOrd,
+
+    // -> bool
+    PartialEq,
+
+    // -> _
+    Ord,
 }
-/// `fn(&A, &B) -> Struct` ⇛ `impl Trait<B> for A { fn op(&self, other: &B) -> Option<Struct> }` (`Struct` = `Ordering`)
-fn partial_ord(func: GenIn) -> Result<TokenStream> {
+fn compare_shape(func: GenIn) -> Result<(CompareShape, FunctionArgs<(Type, Type), Type>)> {
+    // We'll first make sure it looks like `Fn(T, U) -> V`.
     let filtered = func.unwrap_ref_param(0)?.unwrap_ref_param(1)?.binary()?;
-    if let Ok(FunctionArgs {
-        input: (lhs, rhs),
-        output,
-        meta:
-            FunctionMeta {
-                derive_span,
-                generics,
-                to_call,
-                extra_attrs,
-                ..
-            },
-    }) = filtered.clone().unwrap_return("Option")
-    {
-        // The function returns Option<_>, so is assumed to be compatible with
-        // PartialOrd::partial_ord.
-        let where_clause = &generics.where_clause;
-        Ok(quote_spanned! {
-            derive_span =>
-                #extra_attrs
-            impl #generics ::core::cmp::PartialOrd for #lhs #where_clause {
-                 fn partial_cmp(&self, other: &#rhs) -> ::core::option::Option<#output> {
-                    #to_call(self, other)
-                }
-            }
-        })
+
+    // Does it return Option<_> ?
+    let ok = if let Ok(args) = filtered.clone().unwrap_return("Option") {
+        (CompareShape::PartialOrd, args)
     } else {
-        let FunctionArgs {
+        let args = filtered.has_return()?;
+        match args.output {
+            Type::Path(ref type_path) if type_path.path.is_ident("bool") =>
+                (CompareShape::PartialEq, args),
+            _ => (CompareShape::Ord, args),
+        }
+    };
+
+    Ok(ok)
+}
+
+fn ord(func: GenIn) -> Result<TokenStream> {
+    let (
+        shape,
+        FunctionArgs {
             input: (lhs, rhs),
             output,
             meta:
@@ -308,21 +335,115 @@ fn partial_ord(func: GenIn) -> Result<TokenStream> {
                     extra_attrs,
                     ..
                 },
-        } = filtered.has_return()?;
-        // The function does *not* return Option<_>, so we assume that its return value needs to be
-        // wrapped.
-        let where_clause = &generics.where_clause;
-        Ok(quote_spanned! {
-            derive_span =>
-                #extra_attrs
-            impl #generics ::core::cmp::PartialOrd for #lhs #where_clause {
-                 fn partial_cmp(&self, other: &#rhs) -> ::core::option::Option<#output> {
-                    ::core::option::Option::Some(#to_call(self, other))
-                }
+        },
+    ) = compare_shape(func)?;
+
+    let fn_body = match shape {
+        CompareShape::Ord => quote_spanned! {
+            derive_span => #to_call(self, other)
+        },
+        _ =>
+            return Err(diagnostic_error! {
+                output, "`Ord` requires a function returning `Ordering`"
+            }),
+    };
+
+    let where_clause = &generics.where_clause;
+    Ok(quote_spanned! {
+        derive_span =>
+            #extra_attrs
+        impl #generics ::core::cmp::Ord for #lhs #where_clause {
+             fn cmp(&self, other: &#rhs) -> ::core::cmp::Ordering {
+                #fn_body
             }
-        })
-    }
+        }
+    })
 }
+
+fn partial_eq(func: GenIn) -> Result<TokenStream> {
+    let (
+        shape,
+        FunctionArgs {
+            input: (lhs, rhs),
+            output: _,
+            meta:
+                FunctionMeta {
+                    derive_span,
+                    generics,
+                    to_call,
+                    extra_attrs,
+                    ..
+                },
+        },
+    ) = compare_shape(func)?;
+
+    let fn_body = match shape {
+        CompareShape::PartialOrd => quote_spanned! {
+            derive_span =>
+                #to_call(self, other) == ::core::option::Option::Some(::core::cmp::Ordering::Equals)
+        },
+        CompareShape::PartialEq => quote_spanned! {
+            derive_span => #to_call(self, other)
+        },
+        CompareShape::Ord => quote_spanned! {
+            derive_span => #to_call(self, other) == ::core::cmp::Ordering::Equal
+        },
+    };
+
+    let where_clause = &generics.where_clause;
+    Ok(quote_spanned! {
+        derive_span =>
+            #extra_attrs
+        impl #generics ::core::cmp::PartialEq<#rhs> for #lhs #where_clause {
+             fn eq(&self, other: &#rhs) -> ::core::primitive::bool {
+                #fn_body
+            }
+        }
+    })
+}
+
+fn partial_ord(func: GenIn) -> Result<TokenStream> {
+    let (
+        shape,
+        FunctionArgs {
+            input: (lhs, rhs),
+            output,
+            meta:
+                FunctionMeta {
+                    derive_span,
+                    generics,
+                    to_call,
+                    extra_attrs,
+                    ..
+                },
+        },
+    ) = compare_shape(func)?;
+
+    let fn_body = match shape {
+        CompareShape::PartialOrd => quote_spanned! {
+            derive_span => #to_call(self, other)
+        },
+        CompareShape::Ord => quote_spanned! {
+            derive_span => ::core::option::Option::Some(#to_call(self, other))
+        },
+        _ =>
+            return Err(diagnostic_error! {
+                output, "`Partial` requires a function returning `Ordering` or `Option<Ordering>`"
+            }),
+    };
+
+    let where_clause = &generics.where_clause;
+    Ok(quote_spanned! {
+        derive_span =>
+            #extra_attrs
+        impl #generics ::core::cmp::PartialOrd<#rhs> for #lhs #where_clause {
+             fn partial_cmp(&self, other: &#rhs) -> ::core::option::Option<::core::cmp::Ordering> {
+                #fn_body
+            }
+        }
+    })
+}
+
 /// `fn(A) -> T` ⇛ `impl Trait<A> for T { fn op(A) -> T }`
 fn from(func: GenIn) -> Result<TokenStream> {
     let FunctionArgs {
@@ -744,6 +865,37 @@ fn drop(func: GenIn) -> Result<TokenStream> {
         }
     })
 }
+
+/*
+// TODO: works, but needs more work.
+fn fn_once(func: GenIn) -> Result<TokenStream> {
+    let FunctionArgs {
+        input: (input, args),
+        output,
+        meta:
+            FunctionMeta {
+                derive_span,
+                generics,
+                to_call,
+                extra_attrs,
+                ..
+            },
+    } = func.binary()?.any_return();
+    let where_clause = &generics.where_clause;
+    Ok(quote_spanned! {
+        derive_span =>
+            #extra_attrs
+        impl #generics ::core::ops::FnOnce<#args>
+            for #input #where_clause {
+                type Output = #output;
+                extern "rust-call" fn call_once(self, args: #args) -> Self::Output {
+                    #to_call(self, args)
+                }
+            }
+    })
+}
+ */
+
 /// `fn(&A, B) -> &T` ⇛ `impl Trait<B> for A { fn op(&self, B) -> &T }`
 fn index(func: GenIn) -> Result<TokenStream> {
     let FunctionArgs {
