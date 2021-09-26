@@ -1,25 +1,22 @@
 //! [`module@zoet`]'s proc-macro implementation. See that crate for documentation, and do not use
 //! this crate directly.
 
+//// Turn the "allow" lints listed by `rustc -W help` ["rustc 1.55.0 (c8dfcfe04 2021-09-06)"]
+//// into warn lints:
 #![cfg_attr(all(feature = "clippy-insane", debug_assertions), warn(
-    //// Turn the "allow" lints listed by `rustc -W help` ["rustc 1.53.0 (53cb7b09b 2021-06-17)"]
-    //// into warn lints:
     absolute_paths_not_starting_with_crate, box_pointers, deprecated_in_future,
     elided_lifetimes_in_paths, explicit_outlives_requirements, keyword_idents,
     macro_use_extern_crate, meta_variable_misuse, missing_abi, missing_copy_implementations,
     missing_debug_implementations, missing_docs, non_ascii_idents, noop_method_call,
-    pointer_structural_match, semicolon_in_expressions_from_macros, single_use_lifetimes,
+    pointer_structural_match, rust_2021_incompatible_closure_captures,
+    rust_2021_incompatible_or_patterns, rust_2021_prefixes_incompatible_syntax,
+    rust_2021_prelude_collisions, semicolon_in_expressions_from_macros, single_use_lifetimes,
     trivial_casts, trivial_numeric_casts, unreachable_pub, unsafe_code, unsafe_op_in_unsafe_fn,
     unstable_features, unused_crate_dependencies, unused_extern_crates, unused_import_braces,
     unused_lifetimes, unused_qualifications, unused_results, variant_size_differences,
     //// Ditto for clippy lint categories (see https://github.com/rust-lang/rust-clippy):
     clippy::all, clippy::cargo, clippy::nursery, clippy::pedantic, clippy::restriction,
 ))]
-#![forbid(unsafe_code)]
-#![cfg_attr(feature = "unsafe", allow(unsafe_code))]
-#![cfg_attr(feature = "unstable", allow(unstable_features), feature())]
-#![cfg_attr(feature = "unstable-doc-cfg", feature(doc_cfg))]
-#![cfg_attr(feature = "very-unstable", feature())]
 #![cfg_attr(debug_assertions, allow(
     clippy::blanket_clippy_restriction_lints,
     //// turn off individual noisy/buggy lints enabled by broader categories above:

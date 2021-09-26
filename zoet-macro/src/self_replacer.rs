@@ -1,165 +1,118 @@
 use crate::prelude::*;
 use quote::quote_spanned;
 use syn::{
-    parse2, spanned::Spanned, visit_mut::*, FnArg, PatStruct, PatTupleStruct, Path, Receiver, Type,
-    TypePath,
+    fold::*, parse2, spanned::Spanned, FnArg, ItemImpl, ItemTrait, PatStruct, PatTupleStruct, Path,
+    Receiver, Type, TypeGroup, TypePath,
 };
+
+// fold_pat_struct` transforms the destructuring pattern `Self { ... }` into `#self_ty { ... }`, and
+// similarly for `fold_pat_tuple_struct`. This requires `#self_ty` to be a path. For simplicity, we
+// require the self-type to be a path even if we never replace it into destructuring binds, as the
+// `zoet` only transforms inherent impls, not traits, and so the self-type is always a path anyway.
 
 pub(crate) struct SelfReplacer<'a> {
     self_ty: &'a Type,
+    path: &'a Path,
 }
 
 impl<'a> SelfReplacer<'a> {
     pub(crate) fn new(self_ty: &'a Type) -> Self {
-        Self { self_ty }
-    }
-
-    pub(crate) fn try_replace_mut<T>(self_ty: &'a Type, ast: &mut T, op: fn(&mut Self, &mut T)) {
-        let mut sr = Self::new(self_ty);
-        op(&mut sr, ast);
-    }
-
-    fn replace_self_in_path(&self, path: &mut Path) {
-        if path.is_ident("Self") {
-            if let Type::Path(TypePath {
+        match *self_ty {
+            // Some uses of macros cause the type to be wrapped in an invisible group
+            Type::Group(TypeGroup { ref elem, .. }) => Self::new(elem),
+            // A named type, which is what we want.
+            Type::Path(TypePath {
                 qself: None,
-                path: ref self_path,
-            }) = *self.self_ty
-            {
-                *path = self_path.clone();
-            } else {
-                // self.diagnostics.push(
-                //     Diagnostic::spanned(
-                //         path.span().unwrap(),
-                //         Level::Error,
-                //         "Cannot replace Self in this struct pattern with the actual self type",
-                //     )
-                //     .help("The self type needs to be a path such as `Foo`")
-                //     .span_note(
-                //         self.self_ty.full_span().unwrap(),
-                //         "We tried to use this as the self type",
-                //     ),
-                // );
-                abort!(path, "cannot replace Self in non-path types");
-            }
+                ref path,
+            }) => Self { self_ty, path },
+            // We've no idea what to do with any other type.
+            _ => abort!(self_ty, "this self-type is not a path"),
         }
+    }
+
+    fn replace_receiver(&self, receiver: Receiver) -> FnArg {
+        let Receiver {
+            attrs,
+            reference,
+            mutability,
+            self_token,
+        } = receiver;
+
+        let self_ty = self.self_ty;
+        let toks = match reference {
+            // `(mut) self: Self`  -> `(mut) self: Self`
+            None => quote_spanned! {
+                self_ty.span() =>
+                    #(#attrs)* #mutability #self_token : #self_ty
+            },
+            // `&('foo) (mut) self` -> `self: &('foo) (mut) Self`
+            Some((and, lifetime)) => quote_spanned! {
+                self_ty.span() =>
+                    #(#attrs)* #self_token : #and #mutability #lifetime #self_ty
+            },
+        };
+
+        parse2(toks).expect_or_abort("Mis-interpolated quote!(); please report a bug")
     }
 }
 
-impl VisitMut for SelfReplacer<'_> {
-    fn visit_type_mut(&mut self, i: &mut Type) {
-        match *i {
-            Type::Path(ref path) if path.path.is_ident("Self") => *i = self.self_ty.clone(),
-            _ => visit_type_mut(self, i),
+impl Fold for SelfReplacer<'_> {
+    fn fold_fn_arg(&mut self, i: FnArg) -> FnArg {
+        match i {
+            FnArg::Receiver(receiver) => self.replace_receiver(receiver),
+            _ => fold_fn_arg(self, i),
         }
     }
 
-    // This fold_pat_struct transforms the struct pattern `Self { ... }` into `#self_ty { ... }`.
-    //
-    // There is a slight complication in that a struct pattern can only start with a path (i.e. a
-    // syn::Path) so one can't just slot in any arbitrary type. Inherent impls (i.e. `impl Foo
-    // {...}`) can only implement a path (a "base type", in the error messages) so no problem occurs
-    // there, but trait impls don't have that limitation.
-
-    fn visit_pat_struct_mut(&mut self, i: &mut PatStruct) {
-        self.replace_self_in_path(&mut i.path);
-        visit_pat_struct_mut(self, i);
+    fn fold_item_impl(&mut self, i: ItemImpl) -> ItemImpl {
+        // we do not want to recursively update `Self`s inside an `impl` block.
+        i
     }
 
-    fn visit_pat_tuple_struct_mut(&mut self, i: &mut PatTupleStruct) {
-        self.replace_self_in_path(&mut i.path);
-        visit_pat_tuple_struct_mut(self, i);
+    fn fold_item_trait(&mut self, i: ItemTrait) -> ItemTrait {
+        // we do not want to recursively update `Self`s inside a `trait` block.
+        i
     }
 
-    fn visit_fn_arg_mut(&mut self, i: &mut FnArg) {
-        let span = i.span();
-        let self_ty = self.self_ty.clone();
+    fn fold_pat_struct(&mut self, i: PatStruct) -> PatStruct {
+        fold_pat_struct(self, PatStruct {
+            path: self.path.clone(),
+            ..i
+        })
+    }
 
-        if let FnArg::Receiver(ref receiver) = *i {
-            *i = match *receiver {
-                Receiver {
-                    ref attrs,
-                    reference: None,
-                    ..
-                } => parse2::<FnArg>(quote_spanned!( span => #(#attrs)* self: #self_ty )),
+    fn fold_pat_tuple_struct(&mut self, i: PatTupleStruct) -> PatTupleStruct {
+        fold_pat_tuple_struct(self, PatTupleStruct {
+            path: self.path.clone(),
+            ..i
+        })
+    }
 
-                Receiver {
-                    ref attrs,
-                    reference: Some((ref and, ref lifetime)),
-                    mutability,
-                    ..
-                } => parse2::<FnArg>(
-                    quote_spanned!( span => #(#attrs)* self: #and #lifetime #mutability #self_ty ),
-                ),
-            }
-            .expect_or_abort("Mis-interpolated quote!(); please report a bug");
-        } else {
-            visit_fn_arg_mut(self, i);
+    fn fold_type(&mut self, i: Type) -> Type {
+        match i {
+            Type::Path(ref path) if path.path.is_ident("Self") => self.self_ty.clone(),
+            _ => fold_type(self, i),
         }
     }
-
-    // FIXME: we probably eventually want to deal with the case of structs defined inside functions,
-    // since that changes the Self type. It doesn't affect our current usage where we're only
-    // replacing Self in function signatures.
 }
 
 #[test]
 fn test_self_replacer() -> Result<()> {
-#![allow(clippy::panic_in_result_fn)]
+    #![allow(clippy::panic_in_result_fn)]
+    use proc_macro2::TokenStream;
     use quote::{quote, ToTokens};
     use syn::*;
 
-    let transformations = [
-        (
-            quote! { fn testing_testing_one(self) -> Self {} },
-            quote! { fn testing_testing_one(self: RealSelf) -> RealSelf {} },
-            // quote! { fn testing_testing_one(self) -> RealSelf {} },
-        ),
-        (
-            quote! { fn testing_two(&self) -> &Self {} },
-            quote! { fn testing_two(self: &RealSelf) -> &RealSelf {} },
-            // quote! { fn testing_two(&self) -> &RealSelf {} },
-        ),
-        (
-            quote! { fn three(&mut self) -> &mut Self {} },
-            quote! { fn three(self: &mut RealSelf) -> &mut RealSelf {} },
-            // quote! { fn three(&mut self) -> &mut RealSelf {} },
-        ),
-        (
-            quote! { fn four(self: Box<Self>) -> Box<Self> {} },
-            quote! { fn four(self: Box<RealSelf>) -> Box<RealSelf> {} },
-        ),
-        (
-            quote! { fn five() -> Result<Self, &Self> {} },
-            quote! { fn five() -> Result<RealSelf, &RealSelf> {} },
-        ),
-        (
-            quote! { fn six(Self {x, y} : Self ) {} },
-            quote! { fn six(RealSelf {x, y} : RealSelf ) {} },
-        ),
-        (
-            quote! { fn seven(Self(x, y) : Self ) {} },
-            quote! { fn seven(RealSelf(x, y) : RealSelf ) {} },
-        ),
-        // (
-        //     quote! {fn inner(self) { struct Foo; impl Foo { fn new() -> Self { Self } } }},
-        //     quote! {fn inner(self: Self) { struct Foo; impl Foo { fn new() -> Self { Self } } }},
-        // ),
-    ];
-
     let self_ty = &parse2::<Type>(quote! { RealSelf })?;
+    let mut sr = SelfReplacer::new(self_ty);
 
-    for (from, to) in IntoIterator::into_iter(transformations) {
-        let from_text = from.clone().to_string();
-        let to_text = to.clone().to_string();
+    let mut check = move |from: TokenStream, to: TokenStream| -> Result<()> {
+        let from_text = from.to_string();
+        let to_text = to.to_string();
 
         let from_ast = parse2::<Item>(from)?;
-        // dbg! { &from_ast };
         let to_ast = parse2::<Item>(to)?;
-        // dbg! { &to_ast };
-        let mut sr = SelfReplacer::new(self_ty);
-        let mut got_ast = from_ast.clone();
-        sr.visit_item_mut(&mut got_ast);
+        let got_ast = sr.fold_item(from_ast);
 
         let got_text = got_ast.clone().into_token_stream().to_string();
 
@@ -170,6 +123,94 @@ fn test_self_replacer() -> Result<()> {
 
         assert_eq!(&to_ast, &got_ast, "{}", log);
         // assert!(sr.errors.is_empty(), "{}", log);
-    }
+
+        Ok(())
+    };
+
+    check(
+        quote! { fn owned(self) -> Self {} },
+        quote! { fn owned(self: RealSelf) -> RealSelf {} },
+    )?;
+
+    check(
+        quote! { fn owned_mut(mut self) -> Self {} },
+        quote! { fn owned_mut(mut self: RealSelf) -> RealSelf {} },
+    )?;
+
+    check(
+        quote! { fn borrowed(&self) -> &Self {} },
+        quote! { fn borrowed(self: &RealSelf) -> &RealSelf {} },
+    )?;
+
+    check(
+        quote! { fn borrowed_mut(&mut self) -> &mut Self {} },
+        quote! { fn borrowed_mut(self: &mut RealSelf) -> &mut RealSelf {} },
+    )?;
+
+    check(
+        quote! { fn boxed(self: Box<Self>) -> Box<Self> {} },
+        quote! { fn boxed(self: Box<RealSelf>) -> Box<RealSelf> {} },
+    )?;
+
+    check(
+        quote! { fn five() -> Result<Self, &Self> {} },
+        quote! { fn five() -> Result<RealSelf, &RealSelf> {} },
+    )?;
+
+    check(
+        quote! { fn destructure(Self {x, y} : Self ) {} },
+        quote! { fn destructure(RealSelf {x, y} : RealSelf ) {} },
+    )?;
+
+    check(
+        quote! { fn tuple_destructure(Self(x, y) : Self ) {} },
+        quote! { fn tuple_destructure(RealSelf(x, y) : RealSelf ) {} },
+    )?;
+
+    check(
+        quote! {
+            fn inner_impl(self) {
+                struct Inner;
+                impl Inner {
+                    fn new() -> Self { Self }
+                }
+            }
+        },
+        quote! {
+            fn inner_impl(self: RealSelf) {
+                struct Inner;
+                impl Inner {
+                    fn new() -> Self { Self }
+                }
+            }
+        },
+    )?;
+
+    check(
+        quote! {
+            fn inner_trait(self) {
+                trait Inner {
+                    fn new() -> Self { Self }
+                }
+            }
+        },
+        quote! {
+            fn inner_trait(self: RealSelf) {
+                trait Inner {
+                    fn new() -> Self { Self }
+                }
+            }
+        },
+    )?;
+
+    check(
+        quote! {
+            fn wat(self, rhs: <Self as Add>::Rhs) -> <Self as Add>::Output {}
+        },
+        quote! {
+            fn wat(self: RealSelf, rhs: <RealSelf as Add>::Rhs) -> <RealSelf as Add>::Output {}
+        },
+    )?;
+
     Ok(())
 }
