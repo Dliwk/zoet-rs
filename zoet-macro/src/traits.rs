@@ -302,6 +302,7 @@ enum CompareShape {
     // -> _
     Ord,
 }
+#[allow(clippy::type_complexity)] // Yeah, whatever.
 fn compare_shape(func: GenIn) -> Result<(CompareShape, FunctionArgs<(Type, Type), Type>)> {
     // We'll first make sure it looks like `Fn(T, U) -> V`.
     let filtered = func.unwrap_ref_param(0)?.unwrap_ref_param(1)?.binary()?;
@@ -365,7 +366,6 @@ fn partial_eq(func: GenIn) -> Result<TokenStream> {
         shape,
         FunctionArgs {
             input: (lhs, rhs),
-            output: _,
             meta:
                 FunctionMeta {
                     derive_span,
@@ -374,6 +374,7 @@ fn partial_eq(func: GenIn) -> Result<TokenStream> {
                     extra_attrs,
                     ..
                 },
+            ..
         },
     ) = compare_shape(func)?;
 
@@ -426,7 +427,7 @@ fn partial_ord(func: GenIn) -> Result<TokenStream> {
         CompareShape::Ord => quote_spanned! {
             derive_span => ::core::option::Option::Some(#to_call(self, other))
         },
-        _ =>
+        CompareShape::PartialEq =>
             return Err(diagnostic_error! {
                 output, "`Partial` requires a function returning `Ordering` or `Option<Ordering>`"
             }),
@@ -786,9 +787,7 @@ fn add_shaped(func: GenIn, trait_name: &Path, method_name: &Ident) -> Result<Tok
 }
 
 fn add_from_add_assign_shaped(
-    func: GenIn,
-    trait_name: &Path,
-    method_name: &Ident,
+    func: GenIn, trait_name: &Path, method_name: &Ident,
 ) -> Result<TokenStream> {
     let FunctionArgs {
         input: (lhs, rhs),

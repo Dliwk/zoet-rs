@@ -202,9 +202,12 @@ should be added. Here are a few tips for _avoiding_ using this crate:
   that.
 
 + Similarly, its `Add`- and `AddAssign`-adorned functions are trivial delegations to its field's
-  `Add` and `AddAssign` traits. The [`derive_more`] crate is more suitable and will reduce the
-  amount of boilerplate further, and in this case a simple `#[derive(Add, AddAssign)]` on the struct
-  will replace those functions.
+  `Add` and `AddAssign` traits. The [`derive_more`] crate handles this and will reduce the amount of
+  boilerplate further, and in this case a simple `#[derive(Add, AddAssign)]` on the struct will
+  replace those functions.
+
++ [`educe`] lets you derive and customise `Debug`, `Default`, `Hash`, `Clone`, and `Copy` without
+  writing actual boilerplate functions.
 
 + `Borrow` is not just a synonym for `AsRef`, but gives specific guarantees, notably that "`Eq`,
   `Ord` and `Hash` must be equivalent for borrowed and owned values". If your `AsRef` doesn't offer
@@ -212,3 +215,4 @@ should be added. Here are a few tips for _avoiding_ using this crate:
 
 [`cargo-expand`]: https://crates.io/crates/cargo-expand
 [`derive_more`]: https://crates.io/crates/derive_more
+[`educe`]: https://crates.io/educe

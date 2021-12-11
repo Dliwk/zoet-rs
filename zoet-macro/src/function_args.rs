@@ -100,8 +100,7 @@ impl FunctionMeta<'_> {
 
     #[allow(clippy::type_complexity)]
     fn unwrap_param_type<'a>(
-        &self,
-        ty: &'a WithTokens<'a, Type>,
+        &self, ty: &'a WithTokens<'a, Type>,
     ) -> Result<Option<(&'a Ident, Box<[Type]>)>> {
         if let Type::Path(TypePath {
             qself: None,
@@ -134,8 +133,8 @@ impl FunctionMeta<'_> {
     fn unwrap_result<'a>(&self, ty: &'a WithTokens<'a, Type>, name: &str) -> Result<(Type, Type)> {
         if let Some((ident, boxed)) = self.unwrap_param_type(ty)? {
             match (ident.to_string().as_str(), &*boxed) {
-                ("Result", [ref a, ref b]) => return Ok((a.clone(), b.clone())),
-                ("Result", [ref a]) => return Ok((a.clone(), parse_quote! { Error })),
+                ("Result", &[ref a, ref b]) => return Ok((a.clone(), b.clone())),
+                ("Result", &[ref a]) => return Ok((a.clone(), parse_quote! { Error })),
                 _ => (),
             }
         }
@@ -150,7 +149,7 @@ impl FunctionMeta<'_> {
 
     fn unwrap<'a>(&self, ty: &'a WithTokens<'a, Type>, wrapper: &str, name: &str) -> Result<Type> {
         if let Some((ident, boxed)) = self.unwrap_param_type(ty)? {
-            if let (w, [ref a]) = (ident.to_string().as_str(), &*boxed) {
+            if let (w, &[ref a]) = (ident.to_string().as_str(), &*boxed) {
                 if w == wrapper {
                     return Ok(a.clone());
                 }
