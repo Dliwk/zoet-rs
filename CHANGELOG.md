@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 2021-12-11: Release 0.1.8
+
+* Switch to 2021 edition.
+
+* The "self replacer" refactor swapped mutability and lifetime in an expansion. The effect of this
+  was that it would see e.g. `&'a mut self` and transform it into the nonsense "type" `&mut 'a
+  Self`. Apparently the test suite didn't test for this, but it does now.
+
 ## 2021-09-26: Release 0.1.7
 
 * Refactored the "self replacer" which was somewhat unreadable. This revealed a bug where it lost

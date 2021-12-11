@@ -57,8 +57,7 @@ impl<'a, T> WithTokens<'a, T> {
 
 impl<'a> WithTokens<'a, &'a ReturnType> {
     pub(crate) fn from_return_type(
-        return_type: &'a ReturnType,
-        self_ty: Option<&'a Type>,
+        return_type: &'a ReturnType, self_ty: Option<&'a Type>,
     ) -> WithTokens<'a, ReturnType> {
         let to_tokens = return_type;
         let mut value = return_type.clone();
@@ -73,8 +72,7 @@ impl<'a> WithTokens<'a, &'a ReturnType> {
 
 impl<'a> WithTokens<'a, Type> {
     pub(crate) fn from_fn_arg(
-        fn_arg: &'a FnArg,
-        self_ty: Option<&'a Type>,
+        fn_arg: &'a FnArg, self_ty: Option<&'a Type>,
     ) -> WithTokens<'a, Type> {
         let to_tokens = fn_arg;
         let mut value = fn_arg.clone();

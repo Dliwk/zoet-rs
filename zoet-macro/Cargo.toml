@@ -1,8 +1,8 @@
 [package]
 name = "zoet-macro"
-version = "0.1.7"
+version = "0.1.8"
 authors = ["Peter Corlett <abuse@cabal.org.uk>"]
-edition = "2018"
+edition = "2021"
 description = "Implementation detail for `#[zoet]` macro"
 license = "MIT"
 repository = "https://github.com/mooli/zoet-rs"
@@ -17,11 +17,11 @@ nightly = []
 
 [dependencies]
 proc-macro-error = { version = "1.0.4", default-features = false, features = ["syn-error"] }
-proc-macro2 = { version = "1.0.29", default-features = false, features = ["span-locations"] }
-quote = { version = "1.0.9", default-features = false }
+proc-macro2 = { version = "1.0.33", default-features = false, features = ["span-locations"] }
+quote = { version = "1.0.10", default-features = false }
 
 [dependencies.syn]
-version = "1.0.76"
+version = "1.0.82"
 features = [                    # Reason why this feature is needed:
         "extra-traits",         # Debug output in tests.
         "fold",                 # `self_replacer` needs to tree-walk.

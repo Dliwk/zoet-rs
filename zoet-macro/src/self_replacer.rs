@@ -48,7 +48,7 @@ impl<'a> SelfReplacer<'a> {
             // `&('foo) (mut) self` -> `self: &('foo) (mut) Self`
             Some((and, lifetime)) => quote_spanned! {
                 self_ty.span() =>
-                    #(#attrs)* #self_token : #and #mutability #lifetime #self_ty
+                    #(#attrs)* #self_token : #and #lifetime #mutability #self_ty
             },
         };
 
@@ -60,7 +60,7 @@ impl Fold for SelfReplacer<'_> {
     fn fold_fn_arg(&mut self, i: FnArg) -> FnArg {
         match i {
             FnArg::Receiver(receiver) => self.replace_receiver(receiver),
-            _ => fold_fn_arg(self, i),
+            FnArg::Typed(_) => fold_fn_arg(self, i),
         }
     }
 

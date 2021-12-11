@@ -21,11 +21,10 @@ fn trait_impl_from_fn(
     generics: &Generics,
 ) {
     let ident = &signature.ident;
-    let to_call = &if let Some(self_type) = self_type {
-        quote! { < #self_type> :: #ident }
-    } else {
-        quote! { #ident }
-    };
+    let to_call = &self_type.map_or_else(
+        || quote! { #ident },
+        |self_type| quote! { <#self_type>::#ident },
+    );
     let input = signature
         .inputs
         .iter()
@@ -192,7 +191,7 @@ fn trait_fns(
                 Meta::Path(ref value) => value
                     .get_ident()
                     .ok_or_else(|| diagnostic_error!(value, "this is not a valid trait name"))
-                    .and_then(|ident| get_trait_fn(ident)),
+                    .and_then(get_trait_fn),
             },
         };
         (nested_meta.span(), result)
