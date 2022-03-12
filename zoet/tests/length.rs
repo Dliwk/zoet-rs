@@ -143,4 +143,6 @@ fn main() {
     assert_eq!(length / 4.0, Length(0.75));
     assert_eq!(-length, Length(-3.0));
     assert!(Length(0.0) < Length(1.0));
+
+    assert_eq!(length, length.clone());
 }

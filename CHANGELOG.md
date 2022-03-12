@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 2022-03-12: Release 0.1.9
+
+* The generated trait impls now have a rustdoc header indicating which function they were generated
+  from.
+
+* The generated trait impls also add `#[allow(clippy::use_self, unused_qualifications)]` and
+  `#[automatically_derived]` to stop miscellaneous lints from firing on idiomatic macro-generated
+  code.
+
 ## 2021-12-11: Release 0.1.8
 
 * Switch to 2021 edition.

@@ -1,6 +1,6 @@
 [package]
 name = "zoet"
-version = "0.1.8"
+version = "0.1.9"
 authors = ["Peter Corlett <abuse@cabal.org.uk>"]
 edition = "2021"
 description = "Adds `#[zoet]` macro to reduce boilerplate when implementing common traits."
@@ -9,7 +9,10 @@ repository = "https://github.com/mooli/zoet-rs"
 keywords = ["macro", "derive", "trait", "boilerplate", "sweet"]
 categories = ["development-tools", "development-tools::procedural-macro-helpers", "no-std", "rust-patterns" ]
 readme = "../README.md"
-include = ["src/**/*"]
+
+[package.metadata.cargo-all-features]
+#### See <https://github.com/frewsxcv/cargo-all-features>
+#skip_feature_sets = ["clippy-insane"]
 
 [features]
 
@@ -24,7 +27,7 @@ alloc = ["zoet-macro/alloc"]
 ## enable to have clippy moan extensively. Mainly a developer flag, so you probably don't want it.
 clippy-insane = ["zoet-macro/clippy-insane"]
 ## Enable to support generating traits which are nightly-unstable.
-nightly = ["zoet-macro/nightly"]
+#nightly = ["zoet-macro/nightly"]
 
 [dependencies]
 zoet-macro = { version = "0.1.8", path = "../zoet-macro/", default-features = false }

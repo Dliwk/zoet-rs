@@ -1,6 +1,6 @@
 [package]
 name = "zoet-macro"
-version = "0.1.8"
+version = "0.1.9"
 authors = ["Peter Corlett <abuse@cabal.org.uk>"]
 edition = "2021"
 description = "Implementation detail for `#[zoet]` macro"
@@ -10,18 +10,22 @@ keywords = ["macro", "derive", "trait", "boilerplate", "sweet"]
 categories = ["development-tools", "development-tools::procedural-macro-helpers", "no-std", "rust-patterns" ]
 readme = "../README.md"
 
+[package.metadata.cargo-all-features]
+#### See <https://github.com/frewsxcv/cargo-all-features>
+#skip_feature_sets = ["clippy-insane"]
+
 [features]
 alloc = []
 clippy-insane = []
-nightly = []
+#nightly = []
 
 [dependencies]
 proc-macro-error = { version = "1.0.4", default-features = false, features = ["syn-error"] }
-proc-macro2 = { version = "1.0.33", default-features = false, features = ["span-locations"] }
-quote = { version = "1.0.10", default-features = false }
+proc-macro2 = { version = "1.0.36", default-features = false, features = ["span-locations"] }
+quote = { version = "1.0.15", default-features = false }
 
 [dependencies.syn]
-version = "1.0.82"
+version = "1.0.86"
 features = [                    # Reason why this feature is needed:
         "extra-traits",         # Debug output in tests.
         "fold",                 # `self_replacer` needs to tree-walk.
