@@ -4,7 +4,7 @@ use crate::{
     traits::{get_trait_fn, GenFn},
     with_tokens::WithTokens,
 };
-use proc_macro2::{Span, TokenStream};
+use proc_macro2::{Ident, Span, TokenStream};
 use quote::{quote, ToTokens};
 use syn::{
     parse::Parser, parse2, punctuated::Punctuated, spanned::Spanned, token, Attribute, Generics,
@@ -31,19 +31,41 @@ fn trait_impl_from_fn(
         .map(|fn_arg| WithTokens::from_fn_arg(fn_arg, self_type))
         .collect::<Box<_>>();
 
-    let extra_attrs = quote! {
-        #( #copied_attrs )*
-        // #[allow(clippy::pedantic)]
-        //#[automatically_derived]
-        //#[allow(unused_qualifications)]
-    };
+    // This code is a hack around rustdoc choking on spaces and certain angle brackets in paths, and
+    // syn/quote inserting spaces willy-nilly. Since this is an inherent impl rather than a trait
+    // impl, only a subset of types are allowed, and AFAICT there's no horrible syntax (such as `Foo
+    // as Bar`) which won't work after spaces are squashed. So we just squash the spaces.
+    let doc_to_call = self_type
+        .map_or_else(
+            || quote! { #ident },
+            |self_type| quote! { #self_type :: #ident },
+        )
+        .to_string();
+    let squashed_doc_to_call = doc_to_call
+        .chars()
+        .filter(|c| *c != ' ')
+        .collect::<String>();
 
     let mut is_empty = true;
     for (derive_span, attr_trait_fn) in trait_fns(nested_metas) {
         is_empty = false;
         match attr_trait_fn {
             Err(error) => emit_error!(error),
-            Ok(attr_trait_fn) => {
+            Ok((trait_ident, attr_trait_fn)) => {
+                let doc = format!(
+                    "Automatically generated from [`{}`] by `#[zoet({})]`.",
+                    squashed_doc_to_call, trait_ident
+                );
+
+                let extra_attrs = quote! {
+                    //// `clippy::use_self` gives an unhelpful "unnecessary structure name repetition" hint.
+                    #[allow(clippy::use_self)]
+                    #[allow(unused_qualifications)]
+                    #[automatically_derived]
+                    #( #copied_attrs )*
+                    #[doc = #doc]
+                };
+
                 let meta = FunctionMeta {
                     derive_span,
                     signature,
@@ -177,25 +199,30 @@ fn zoet_inherent_impl(attr: &TokenStream, mut item_impl: ItemImpl) -> TokenStrea
     tokens
 }
 
+fn parse_nested_meta(nested_meta: NestedMeta) -> Result<(Ident, GenFn)> {
+    match nested_meta {
+        NestedMeta::Lit(ref lit) => Err(diagnostic_error!(lit, "literals are not valid here")),
+        NestedMeta::Meta(ref meta) => match *meta {
+            Meta::List(ref value) => Err(diagnostic_error!(value, "this does not take parameters")),
+            Meta::NameValue(ref value) =>
+                Err(diagnostic_error!(value, "this does not take a parameter")),
+            Meta::Path(ref value) => {
+                let ident = value
+                    .get_ident()
+                    .ok_or_else(|| diagnostic_error!(value, "this is not a valid trait name"))?;
+                let trait_fn = get_trait_fn(ident)?;
+                Ok((ident.clone(), trait_fn))
+            }
+        },
+    }
+}
+
 fn trait_fns(
     nested_metas: impl IntoIterator<Item = NestedMeta>,
-) -> impl Iterator<Item = (Span, Result<GenFn>)> {
-    nested_metas.into_iter().map(|nested_meta| {
-        let result = match nested_meta {
-            NestedMeta::Lit(ref lit) => Err(diagnostic_error!(lit, "literals are not valid here")),
-            NestedMeta::Meta(ref meta) => match *meta {
-                Meta::List(ref value) =>
-                    Err(diagnostic_error!(value, "this does not take parameters")),
-                Meta::NameValue(ref value) =>
-                    Err(diagnostic_error!(value, "this does not take a parameter")),
-                Meta::Path(ref value) => value
-                    .get_ident()
-                    .ok_or_else(|| diagnostic_error!(value, "this is not a valid trait name"))
-                    .and_then(get_trait_fn),
-            },
-        };
-        (nested_meta.span(), result)
-    })
+) -> impl Iterator<Item = (Span, Result<(Ident, GenFn)>)> {
+    nested_metas
+        .into_iter()
+        .map(|nested_meta| (nested_meta.span(), parse_nested_meta(nested_meta)))
 }
 
 pub(crate) fn zoet(attr: &TokenStream, item: &TokenStream) -> TokenStream {

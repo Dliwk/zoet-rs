@@ -1,3 +1,5 @@
+#![cfg(feature = "alloc")] // this tests traits which require an allocator
+
 use zoet::zoet;
 
 #[repr(transparent)]
