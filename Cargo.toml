@@ -1,2 +1,7 @@
 [workspace]
 members = ["zoet", "zoet-macro"]
+# From <https://doc.rust-lang.org/cargo/reference/resolver.html#resolver-versions>: "The resolver
+# version in dependencies is ignored, only the value in the top-level package will be used. If using
+# a virtual workspace, the version should be specified in the [workspace] table". IOW, if we want
+# the equivalent of `edition = "2021"` (and we do) then we need to set this:
+resolver = "2"

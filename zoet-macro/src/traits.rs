@@ -48,7 +48,8 @@ pub(crate) fn get_trait_fn(ident: &Ident) -> Result<GenFn> {
         // "GlobalAlloc" => Requires two functions to be implemented.
 
         // std::any
-        // "Any" => doable.
+        // "Any" => possible, but it's already automatically-implemented by the compiler.
+        // "Provider" => nightly.
 
         // std::borrow
         "Borrow" => |f| borrow_shaped(f, &pq!(::core::borrow::Borrow), &pq!(borrow)),
@@ -77,7 +78,8 @@ pub(crate) fn get_trait_fn(ident: &Ident) -> Result<GenFn> {
         "Default" => default,
 
         // std::error
-        // "Error" => Generate `source()`?
+        // "Error" => possible because all methods are defaulted, but which method should we
+        // implement? Use e.g. thiserror instead.
 
         // std::fmt
         "Binary" => |f| debug_shaped(f, &pq!(::core::fmt::Binary)),
@@ -93,10 +95,10 @@ pub(crate) fn get_trait_fn(ident: &Ident) -> Result<GenFn> {
 
         // std::future
         "Future" => future,
-        // "IntoFuture" ?
+        "IntoFuture" => into_future,
 
         // std::hash
-        // "BuildHasher"?
+        // "BuildHasher" => possible, arguably TODO.
         "Hash" => hash,
         // "Hasher" => Requires two functions to be implemented.
 
@@ -197,7 +199,8 @@ fn borrow_shaped(func: GenIn, trait_name: &Path, method_name: &Ident) -> Result<
         derive_span =>
             #extra_attrs
         impl #generics #trait_name <#output> for #input #where_clause {
-             fn #method_name (&self) -> &#output {
+            #[inline]
+            fn #method_name (&self) -> &#output {
                 #to_call(self)
             }
         }
@@ -222,7 +225,8 @@ fn borrow_mut_shaped(func: GenIn, trait_name: &Path, method_name: &Ident) -> Res
         derive_span =>
             #extra_attrs
         impl #generics #trait_name <#output> for #input #where_clause {
-             fn #method_name (&mut self) -> &mut #output {
+            #[inline]
+            fn #method_name (&mut self) -> &mut #output {
                 #to_call(self)
             }
         }
@@ -248,7 +252,8 @@ fn to_owned(func: GenIn) -> Result<TokenStream> {
             #extra_attrs
         impl #generics ::zoet::__alloc::borrow::ToOwned for #input #where_clause {
             type Owned = #output;
-             fn to_owned(&self) -> Self::Owned {
+            #[inline]
+            fn to_owned(&self) -> Self::Owned {
                 #to_call(self)
             }
         }
@@ -273,7 +278,8 @@ fn clone(func: GenIn) -> Result<TokenStream> {
         derive_span =>
             #extra_attrs
         impl #generics ::core::clone::Clone for #input #where_clause {
-             fn clone(&self) -> #output {
+            #[inline]
+            fn clone(&self) -> #output {
                 #to_call(self)
             }
         }
@@ -354,7 +360,7 @@ fn ord(func: GenIn) -> Result<TokenStream> {
         derive_span =>
             #extra_attrs
         impl #generics ::core::cmp::Ord for #lhs #where_clause {
-             fn cmp(&self, other: &#rhs) -> ::core::cmp::Ordering {
+            fn cmp(&self, other: &#rhs) -> ::core::cmp::Ordering {
                 #fn_body
             }
         }
@@ -396,7 +402,8 @@ fn partial_eq(func: GenIn) -> Result<TokenStream> {
         derive_span =>
             #extra_attrs
         impl #generics ::core::cmp::PartialEq<#rhs> for #lhs #where_clause {
-             fn eq(&self, other: &#rhs) -> ::core::primitive::bool {
+            #[inline]
+            fn eq(&self, other: &#rhs) -> ::core::primitive::bool {
                 #fn_body
             }
         }
@@ -438,7 +445,8 @@ fn partial_ord(func: GenIn) -> Result<TokenStream> {
         derive_span =>
             #extra_attrs
         impl #generics ::core::cmp::PartialOrd<#rhs> for #lhs #where_clause {
-             fn partial_cmp(&self, other: &#rhs) -> ::core::option::Option<::core::cmp::Ordering> {
+            #[inline]
+            fn partial_cmp(&self, other: &#rhs) -> ::core::option::Option<::core::cmp::Ordering> {
                 #fn_body
             }
         }
@@ -464,7 +472,8 @@ fn from(func: GenIn) -> Result<TokenStream> {
         derive_span =>
             #extra_attrs
         impl #generics ::core::convert::From<#input> for #output #where_clause {
-             fn from(value: #input) -> Self {
+            #[inline]
+            fn from(value: #input) -> Self {
                 #to_call(value)
             }
         }
@@ -489,7 +498,8 @@ fn into(func: GenIn) -> Result<TokenStream> {
         derive_span =>
             #extra_attrs
         impl #generics ::core::convert::Into<#output> for #input #where_clause {
-             fn into(self) -> #output {
+            #[inline]
+            fn into(self) -> #output {
                 #to_call(self)
             }
         }
@@ -516,7 +526,8 @@ fn try_from(func: GenIn) -> Result<TokenStream> {
             #extra_attrs
         impl #generics ::core::convert::TryFrom<#input> for #output #where_clause {
             type Error = #err;
-             fn try_from(value: #input) -> ::core::result::Result<Self, Self::Error> {
+            #[inline]
+            fn try_from(value: #input) -> ::core::result::Result<Self, Self::Error> {
                 #to_call(value)
             }
         }
@@ -542,7 +553,8 @@ fn try_into(func: GenIn) -> Result<TokenStream> {
             #extra_attrs
         impl #generics ::core::convert::TryInto<#output> for #input #where_clause {
             type Error = #err;
-             fn try_into(self) -> ::core::result::Result<#output, Self::Error> {
+            #[inline]
+            fn try_into(self) -> ::core::result::Result<#output, Self::Error> {
                 #to_call(self)
             }
         }
@@ -567,7 +579,8 @@ fn default(func: GenIn) -> Result<TokenStream> {
         derive_span =>
             #extra_attrs
         impl #generics ::core::default::Default for #output #where_clause {
-             fn default() -> Self {
+            #[inline]
+            fn default() -> Self {
                 #to_call()
             }
         }
@@ -596,7 +609,8 @@ fn debug_shaped(func: GenIn, trait_name: &Path) -> Result<TokenStream> {
         derive_span =>
             #extra_attrs
         impl #generics #trait_name for #obj #where_clause {
-             fn fmt(&self, f: &mut #formatter) -> #output {
+            #[inline]
+            fn fmt(&self, f: &mut #formatter) -> #output {
                 #to_call(self, f)
             }
         }
@@ -625,7 +639,8 @@ fn write(func: GenIn) -> Result<TokenStream> {
         derive_span =>
             #extra_attrs
         impl #generics ::core::fmt::Write for #obj #where_clause {
-             fn write_str(&mut self, s: &#str) -> #output {
+            #[inline]
+            fn write_str(&mut self, s: &#str) -> #output {
                 #to_call(self, s)
             }
         }
@@ -657,12 +672,43 @@ fn future(func: GenIn) -> Result<TokenStream> {
         impl #generics ::core::future::Future for #obj #where_clause {
             type Output = #output;
 
+            #[inline]
             fn poll(
                 self: ::core::pin::Pin<&mut Self>,
                 cx: &mut ::core::task::Context
             ) -> ::core::task::Poll<Self::Output> {
                 #to_call(self, cx)
             }
+        }
+    })
+}
+
+/// `fn(self) -> impl Future<Output=T>`
+fn into_future(func: GenIn) -> Result<TokenStream> {
+    let FunctionArgs {
+        input,
+        output,
+        meta:
+            FunctionMeta {
+                derive_span,
+                generics,
+                to_call,
+                extra_attrs,
+                ..
+            },
+    } = func.unary()?.has_return()?;
+    let where_clause = &generics.where_clause;
+    Ok(quote_spanned! {
+        derive_span =>
+            #extra_attrs
+        impl #generics ::core::future::IntoFuture for #input #where_clause {
+            type IntoFuture = #output;
+            type Output = <Self::IntoFuture as ::core::future::Future>::Output;
+
+            #[inline]
+             fn into_future(self) -> Self::IntoFuture {
+                 #to_call(self)
+             }
         }
     })
 }
@@ -690,7 +736,8 @@ fn hash(func: GenIn) -> Result<TokenStream> {
         derive_span =>
             #extra_attrs
         impl #generics ::core::hash::Hash for #obj #where_clause {
-             fn hash<H: ::core::hash::Hasher>(&self, state: &mut H) {
+            #[inline]
+            fn hash<H: ::core::hash::Hasher>(&self, state: &mut H) {
                 #to_call(self, state);
             }
         }
@@ -719,7 +766,8 @@ fn into_iterator(func: GenIn) -> Result<TokenStream> {
         impl #generics ::core::iter::IntoIterator for #input #where_clause {
             type IntoIter = #output;
             type Item = <Self::IntoIter as ::core::iter::Iterator>::Item;
-             fn into_iter(self) -> Self::IntoIter {
+            #[inline]
+            fn into_iter(self) -> Self::IntoIter {
                 #to_call(self)
             }
         }
@@ -746,7 +794,8 @@ fn iterator(func: GenIn) -> Result<TokenStream> {
             #extra_attrs
         impl #generics ::core::iter::Iterator for #input #where_clause {
             type Item = #output;
-             fn next(&mut self) -> Option<Self::Item> {
+            #[inline]
+            fn next(&mut self) -> Option<Self::Item> {
                 #to_call(self)
             }
         }
@@ -779,7 +828,8 @@ fn add_shaped(func: GenIn, trait_name: &Path, method_name: &Ident) -> Result<Tok
             #extra_attrs
         impl #generics #trait_name<#rhs> for #lhs #where_clause {
             type Output = #output;
-             fn #method_name(self, rhs: #rhs) -> Self::Output {
+            #[inline]
+            fn #method_name(self, rhs: #rhs) -> Self::Output {
                 #to_call(self, rhs)
             }
         }
@@ -807,7 +857,8 @@ fn add_from_add_assign_shaped(
             #extra_attrs
         impl #generics #trait_name<#rhs> for #lhs #where_clause {
             type Output = #lhs;
-             fn #method_name(mut self, rhs: #rhs) -> #lhs {
+            #[inline]
+            fn #method_name(mut self, rhs: #rhs) -> #lhs {
                 #to_call(&mut self, rhs) ; self
             }
         }
@@ -833,7 +884,8 @@ fn add_assign_shaped(func: GenIn, trait_name: &Path, method_name: &Ident) -> Res
         derive_span =>
             #extra_attrs
         impl #generics #trait_name<#rhs> for #lhs #where_clause {
-             fn #method_name(&mut self, rhs: #rhs) {
+            #[inline]
+            fn #method_name(&mut self, rhs: #rhs) {
                 #to_call(self, rhs);
             }
         }
@@ -858,7 +910,8 @@ fn drop(func: GenIn) -> Result<TokenStream> {
         derive_span =>
             #extra_attrs
         impl #generics ::core::ops::Drop for #input #where_clause {
-             fn drop(&mut self) {
+            #[inline]
+            fn drop(&mut self) {
                 #to_call(self);
             }
         }
@@ -915,6 +968,7 @@ fn index(func: GenIn) -> Result<TokenStream> {
             #extra_attrs
         impl #generics ::core::ops::Index<#idx> for #coll #where_clause {
             type Output = #output;
+            #[inline]
              fn index(&self, index: #idx) -> &Self::Output {
                 #to_call(self, index)
             }
@@ -940,6 +994,7 @@ fn index_mut(func: GenIn) -> Result<TokenStream> {
         derive_span =>
             #extra_attrs
         impl #generics ::core::ops::IndexMut<#idx> for #coll #where_clause {
+            #[inline]
              fn index_mut(&mut self, index: #idx) -> &mut Self::Output {
                 #to_call(self, index)
             }
@@ -966,6 +1021,7 @@ fn neg_shaped(func: GenIn, trait_name: &Path, method_name: &Ident) -> Result<Tok
             #extra_attrs
         impl #generics #trait_name for #input #where_clause {
             type Output = #output;
+            #[inline]
              fn #method_name(self) -> Self::Output {
                 #to_call(self)
             }
@@ -992,6 +1048,7 @@ fn deref(func: GenIn) -> Result<TokenStream> {
             #extra_attrs
         impl #generics ::core::ops::Deref for #input #where_clause {
             type Target = #output;
+            #[inline]
              fn deref(&self) -> &Self::Target {
                 #to_call(self)
             }
@@ -1017,6 +1074,7 @@ fn deref_mut(func: GenIn) -> Result<TokenStream> {
         derive_span =>
             #extra_attrs
         impl #generics ::core::ops::DerefMut for #input #where_clause {
+            #[inline]
              fn deref_mut(&mut self) -> &mut #output {
                 #to_call(self)
             }
@@ -1044,6 +1102,7 @@ fn from_str(func: GenIn) -> Result<TokenStream> {
             #extra_attrs
         impl #generics ::core::str::FromStr for #output #where_clause {
             type Err = #err;
+            #[inline]
              fn from_str(s: #input) -> ::core::result::Result<Self, Self::Err> {
                 #to_call(s)
             }
@@ -1070,6 +1129,7 @@ fn to_string(func: GenIn) -> Result<TokenStream> {
         derive_span =>
             #extra_attrs
         impl #generics ::zoet::__alloc::string::ToString for #input #where_clause {
+            #[inline]
              fn to_string(&self) -> #output {
                 #to_call(self)
             }

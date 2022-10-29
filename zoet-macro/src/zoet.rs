@@ -7,8 +7,8 @@ use crate::{
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{quote, ToTokens};
 use syn::{
-    parse::Parser, parse2, punctuated::Punctuated, spanned::Spanned, token, Attribute, Generics,
-    ImplItem, ImplItemMethod, Item, ItemFn, ItemImpl, Meta, NestedMeta, Signature, Type,
+    parse::Parser, parse2, punctuated::Punctuated, spanned::Spanned, token, Attribute,
+    Generics, ImplItem, ImplItemMethod, Item, ItemFn, ItemImpl, Meta, NestedMeta, Signature, Type,
 };
 
 fn trait_impl_from_fn(
@@ -58,17 +58,22 @@ fn trait_impl_from_fn(
                 );
 
                 let extra_attrs = quote! {
-                    //// `clippy::use_self` gives an unhelpful "unnecessary structure name repetition" hint.
-                    #[allow(clippy::use_self)]
-                    #[allow(unused_qualifications)]
+                    #[allow(
+                        // Disable unhelpful "unnecessary structure name repetition" lint.
+                        clippy::use_self,
+                        // Disable unhelpful "unnecessary qualification" lint; paths *should* be
+                        // fully-qualified in macros.
+                        unused_qualifications,
+                    )]
                     #[automatically_derived]
                     #( #copied_attrs )*
                     #[doc = #doc]
                 };
 
                 let meta = FunctionMeta {
-                    derive_span,
                     signature,
+                    derive_span,
+                    trait_ident: &trait_ident,
                     to_call,
                     generics,
                     extra_attrs: &extra_attrs,
@@ -149,12 +154,25 @@ fn add_assign_generics(lhs: &mut Generics, rhs: Generics) {
 fn filter_attrs(attrs: &mut Vec<Attribute>) -> (Vec<Attribute>, Vec<Attribute>) {
     let mut copied_attrs = Vec::new();
     // drain_filter would be nice, but it's not stable yet.
-    let (zoet_attrs, fn_attrs) = attrs.drain(..).partition(|attr| {
-        if attr.path.is_ident("cfg") || attr.path.is_ident("doc_cfg") {
+    let (zoet_attrs, mut fn_attrs) = attrs.drain(..).partition::<Vec<_>, _>(|attr| {
+        if attr.path.is_ident("cfg") {
             copied_attrs.push(attr.clone());
         }
         attr.path.is_ident("zoet")
     });
+
+    let extra_attributes = Attribute::parse_outer
+        .parse2(quote! {
+            #[allow(
+                //// It's probably not needless since we copy lifetimes into the generated trait impl
+                clippy::needless_lifetimes,
+                //// It's natural to give the wrapped inherent fn the same name as the trait impl fn
+                //// Disabled for now as this clippy lint seems a bit broken.
+                // clippy::same_name_method,
+            )]
+        })
+        .unwrap_or_abort();
+    fn_attrs.extend(extra_attributes.into_iter());
     *attrs = fn_attrs;
     (zoet_attrs, copied_attrs)
 }
@@ -251,7 +269,7 @@ pub(crate) fn zoet(attr: &TokenStream, item: &TokenStream) -> TokenStream {
         },
         Item::Impl(item_impl) => match item_impl {
             ItemImpl { trait_: None, .. } => zoet_inherent_impl(attr, item_impl),
-            _ => abort!(item_impl, "can only apply to trait impls"),
+            _ => abort!(item_impl, "can only apply to inherent impls"),
         },
         item => abort!(item, "can only apply to functions or inherent impls"),
     }
