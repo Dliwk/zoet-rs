@@ -56,9 +56,7 @@ impl FunctionMeta<'_> {
 
     fn check_ref<'a>(&self, ty: &'a WithTokens<'a, Type>, name: &str) -> Result<()> {
         match ty.value {
-            Type::Reference(TypeReference {
-                mutability: None, ..
-            }) => Ok(()),
+            Type::Reference(TypeReference { mutability: None, .. }) => Ok(()),
             _ => self.result(ty, &format!("{} must be an immutable reference", name)),
         }
     }
@@ -67,10 +65,7 @@ impl FunctionMeta<'_> {
     fn unwrap_ref<'a>(&self, ty: &'a WithTokens<'a, Type>, name: &str) -> Result<Type> {
         match ty.value {
             Type::Reference(TypeReference {
-                lifetime: None,
-                mutability: None,
-                ref elem,
-                ..
+                lifetime: None, mutability: None, ref elem, ..
             }) => Ok(elem.as_ref().clone()),
             _ => self.result(
                 ty,
@@ -105,19 +100,13 @@ impl FunctionMeta<'_> {
     fn unwrap_param_type<'a>(
         &self, ty: &'a WithTokens<'a, Type>,
     ) -> Result<Option<(&'a Ident, Box<[Type]>)>> {
-        if let Type::Path(TypePath {
-            qself: None,
-            ref path,
-        }) = ty.value
-        {
+        if let Type::Path(TypePath { qself: None, ref path }) = ty.value {
             let last = path
                 .segments
                 .last()
                 .expect_or_abort("TypePath::path is always nonempty");
-            if let PathSegment {
-                ref ident,
-                arguments: PathArguments::AngleBracketed(ref abga),
-            } = *last
+            if let PathSegment { ref ident, arguments: PathArguments::AngleBracketed(ref abga) } =
+                *last
             {
                 let args = abga
                     .args
@@ -175,19 +164,11 @@ pub(crate) struct FunctionArgs<'a, I, O> {
 
 impl<'a, I, O> FunctionArgs<'a, I, O> {
     fn with_input<I2>(self, input: I2) -> FunctionArgs<'a, I2, O> {
-        FunctionArgs {
-            input,
-            output: self.output,
-            meta: self.meta,
-        }
+        FunctionArgs { input, output: self.output, meta: self.meta }
     }
 
     fn with_output<O2>(self, output: O2) -> FunctionArgs<'a, I, O2> {
-        FunctionArgs {
-            input: self.input,
-            output,
-            meta: self.meta,
-        }
+        FunctionArgs { input: self.input, output, meta: self.meta }
     }
 }
 
@@ -276,42 +257,26 @@ impl<'a, O> FunctionArgs<'a, Box<[WithTokens<'a, Type>]>, O> {
     }
 
     pub(crate) fn unary(self) -> Result<FunctionArgs<'a, Type, O>> {
-        let Self {
-            input,
-            output,
-            meta,
-        } = self;
+        let Self { input, output, meta } = self;
 
         <Box<[_; 1]>>::try_from(input)
             .map_err(|_box| {
                 meta.diagnostic_error(meta.signature, &"function should take one parameter")
             })
             .map(|boxed| match *boxed {
-                [a] => FunctionArgs {
-                    input: a.value,
-                    output,
-                    meta,
-                },
+                [a] => FunctionArgs { input: a.value, output, meta },
             })
     }
 
     pub(crate) fn binary(self) -> Result<FunctionArgs<'a, (Type, Type), O>> {
-        let Self {
-            input,
-            output,
-            meta,
-        } = self;
+        let Self { input, output, meta } = self;
 
         <Box<[_; 2]>>::try_from(input)
             .map_err(|_box| {
                 meta.diagnostic_error(meta.signature, &"function should take two parameters")
             })
             .map(|boxed| match *boxed {
-                [a, b] => FunctionArgs {
-                    input: (a.value, b.value),
-                    output,
-                    meta,
-                },
+                [a, b] => FunctionArgs { input: (a.value, b.value), output, meta },
             })
     }
 }

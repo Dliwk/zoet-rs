@@ -185,14 +185,7 @@ fn borrow_shaped(func: GenIn, trait_name: &Path, method_name: &Ident) -> Result<
     let FunctionArgs {
         input,
         output,
-        meta:
-            FunctionMeta {
-                derive_span,
-                generics,
-                to_call,
-                extra_attrs,
-                ..
-            },
+        meta: FunctionMeta { derive_span, generics, to_call, extra_attrs, .. },
     } = func.unwrap_ref_param(0)?.unary()?.unwrap_ref_return()?;
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
@@ -211,14 +204,7 @@ fn borrow_mut_shaped(func: GenIn, trait_name: &Path, method_name: &Ident) -> Res
     let FunctionArgs {
         input,
         output,
-        meta:
-            FunctionMeta {
-                derive_span,
-                generics,
-                to_call,
-                extra_attrs,
-                ..
-            },
+        meta: FunctionMeta { derive_span, generics, to_call, extra_attrs, .. },
     } = func.unwrap_mut_param(0)?.unary()?.unwrap_mut_return()?;
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
@@ -237,14 +223,7 @@ fn to_owned(func: GenIn) -> Result<TokenStream> {
     let FunctionArgs {
         input,
         output,
-        meta:
-            FunctionMeta {
-                derive_span,
-                generics,
-                to_call,
-                extra_attrs,
-                ..
-            },
+        meta: FunctionMeta { derive_span, generics, to_call, extra_attrs, .. },
     } = func.unwrap_ref_param(0)?.unary()?.has_return()?;
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
@@ -264,14 +243,7 @@ fn clone(func: GenIn) -> Result<TokenStream> {
     let FunctionArgs {
         input,
         output,
-        meta:
-            FunctionMeta {
-                derive_span,
-                generics,
-                to_call,
-                extra_attrs,
-                ..
-            },
+        meta: FunctionMeta { derive_span, generics, to_call, extra_attrs, .. },
     } = func.unwrap_ref_param(0)?.unary()?.has_return()?; // TODO: create and use a .self_return() instead?
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
@@ -334,14 +306,7 @@ fn ord(func: GenIn) -> Result<TokenStream> {
         FunctionArgs {
             input: (lhs, rhs),
             output,
-            meta:
-                FunctionMeta {
-                    derive_span,
-                    generics,
-                    to_call,
-                    extra_attrs,
-                    ..
-                },
+            meta: FunctionMeta { derive_span, generics, to_call, extra_attrs, .. },
         },
     ) = compare_shape(func)?;
 
@@ -372,14 +337,7 @@ fn partial_eq(func: GenIn) -> Result<TokenStream> {
         shape,
         FunctionArgs {
             input: (lhs, rhs),
-            meta:
-                FunctionMeta {
-                    derive_span,
-                    generics,
-                    to_call,
-                    extra_attrs,
-                    ..
-                },
+            meta: FunctionMeta { derive_span, generics, to_call, extra_attrs, .. },
             ..
         },
     ) = compare_shape(func)?;
@@ -416,14 +374,7 @@ fn partial_ord(func: GenIn) -> Result<TokenStream> {
         FunctionArgs {
             input: (lhs, rhs),
             output,
-            meta:
-                FunctionMeta {
-                    derive_span,
-                    generics,
-                    to_call,
-                    extra_attrs,
-                    ..
-                },
+            meta: FunctionMeta { derive_span, generics, to_call, extra_attrs, .. },
         },
     ) = compare_shape(func)?;
 
@@ -458,14 +409,7 @@ fn from(func: GenIn) -> Result<TokenStream> {
     let FunctionArgs {
         input,
         output,
-        meta:
-            FunctionMeta {
-                derive_span,
-                generics,
-                to_call,
-                extra_attrs,
-                ..
-            },
+        meta: FunctionMeta { derive_span, generics, to_call, extra_attrs, .. },
     } = func.unary()?.has_return()?; // TODO: .self_return()?
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
@@ -484,14 +428,7 @@ fn into(func: GenIn) -> Result<TokenStream> {
     let FunctionArgs {
         input,
         output,
-        meta:
-            FunctionMeta {
-                derive_span,
-                generics,
-                to_call,
-                extra_attrs,
-                ..
-            },
+        meta: FunctionMeta { derive_span, generics, to_call, extra_attrs, .. },
     } = func.unary()?.has_return()?;
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
@@ -511,14 +448,7 @@ fn try_from(func: GenIn) -> Result<TokenStream> {
     let FunctionArgs {
         input,
         output: (output, err),
-        meta:
-            FunctionMeta {
-                derive_span,
-                generics,
-                to_call,
-                extra_attrs,
-                ..
-            },
+        meta: FunctionMeta { derive_span, generics, to_call, extra_attrs, .. },
     } = func.unary()?.unwrap_result_return()?;
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
@@ -538,14 +468,7 @@ fn try_into(func: GenIn) -> Result<TokenStream> {
     let FunctionArgs {
         input,
         output: (output, err),
-        meta:
-            FunctionMeta {
-                derive_span,
-                generics,
-                to_call,
-                extra_attrs,
-                ..
-            },
+        meta: FunctionMeta { derive_span, generics, to_call, extra_attrs, .. },
     } = func.unary()?.unwrap_result_return()?;
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
@@ -565,14 +488,7 @@ fn default(func: GenIn) -> Result<TokenStream> {
     let FunctionArgs {
         input: (),
         output,
-        meta:
-            FunctionMeta {
-                derive_span,
-                generics,
-                to_call,
-                extra_attrs,
-                ..
-            },
+        meta: FunctionMeta { derive_span, generics, to_call, extra_attrs, .. },
     } = func.nullary()?.has_return()?;
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
@@ -591,14 +507,7 @@ fn debug_shaped(func: GenIn, trait_name: &Path) -> Result<TokenStream> {
     let FunctionArgs {
         input: (obj, formatter),
         output,
-        meta:
-            FunctionMeta {
-                derive_span,
-                generics,
-                to_call,
-                extra_attrs,
-                ..
-            },
+        meta: FunctionMeta { derive_span, generics, to_call, extra_attrs, .. },
     } = func
         .unwrap_ref_param(0)?
         .unwrap_mut_param(1)?
@@ -621,14 +530,7 @@ fn write(func: GenIn) -> Result<TokenStream> {
     let FunctionArgs {
         input: (obj, str),
         output,
-        meta:
-            FunctionMeta {
-                derive_span,
-                generics,
-                to_call,
-                extra_attrs,
-                ..
-            },
+        meta: FunctionMeta { derive_span, generics, to_call, extra_attrs, .. },
     } = func
         .unwrap_mut_param(0)?
         .unwrap_ref_param(1)?
@@ -652,14 +554,7 @@ fn future(func: GenIn) -> Result<TokenStream> {
     let FunctionArgs {
         input: (obj, _),
         output,
-        meta:
-            FunctionMeta {
-                derive_span,
-                generics,
-                to_call,
-                extra_attrs,
-                ..
-            },
+        meta: FunctionMeta { derive_span, generics, to_call, extra_attrs, .. },
     } = func
         .unwrap_param(0, "Pin")?
         .unwrap_mut_param(0)?
@@ -688,14 +583,7 @@ fn into_future(func: GenIn) -> Result<TokenStream> {
     let FunctionArgs {
         input,
         output,
-        meta:
-            FunctionMeta {
-                derive_span,
-                generics,
-                to_call,
-                extra_attrs,
-                ..
-            },
+        meta: FunctionMeta { derive_span, generics, to_call, extra_attrs, .. },
     } = func.unary()?.has_return()?;
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
@@ -718,14 +606,7 @@ fn hash(func: GenIn) -> Result<TokenStream> {
     let FunctionArgs {
         input: (obj, _hasher),
         output: (),
-        meta:
-            FunctionMeta {
-                derive_span,
-                generics,
-                to_call,
-                extra_attrs,
-                ..
-            },
+        meta: FunctionMeta { derive_span, generics, to_call, extra_attrs, .. },
     } = func
         .unwrap_ref_param(0)?
         .unwrap_mut_param(1)?
@@ -750,14 +631,7 @@ fn into_iterator(func: GenIn) -> Result<TokenStream> {
     let FunctionArgs {
         input,
         output,
-        meta:
-            FunctionMeta {
-                derive_span,
-                generics,
-                to_call,
-                extra_attrs,
-                ..
-            },
+        meta: FunctionMeta { derive_span, generics, to_call, extra_attrs, .. },
     } = func.unary()?.has_return()?;
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
@@ -779,14 +653,7 @@ fn iterator(func: GenIn) -> Result<TokenStream> {
     let FunctionArgs {
         input,
         output,
-        meta:
-            FunctionMeta {
-                derive_span,
-                generics,
-                to_call,
-                extra_attrs,
-                ..
-            },
+        meta: FunctionMeta { derive_span, generics, to_call, extra_attrs, .. },
     } = func.unwrap_mut_param(0)?.unary()?.unwrap_return("Option")?;
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
@@ -813,14 +680,7 @@ fn add_shaped(func: GenIn, trait_name: &Path, method_name: &Ident) -> Result<Tok
     let FunctionArgs {
         input: (lhs, rhs),
         output,
-        meta:
-            FunctionMeta {
-                derive_span,
-                generics,
-                to_call,
-                extra_attrs,
-                ..
-            },
+        meta: FunctionMeta { derive_span, generics, to_call, extra_attrs, .. },
     } = func.binary()?.has_return()?;
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
@@ -842,14 +702,7 @@ fn add_from_add_assign_shaped(
     let FunctionArgs {
         input: (lhs, rhs),
         output: (),
-        meta:
-            FunctionMeta {
-                derive_span,
-                generics,
-                to_call,
-                extra_attrs,
-                ..
-            },
+        meta: FunctionMeta { derive_span, generics, to_call, extra_attrs, .. },
     } = func.unwrap_mut_param(0)?.binary()?.default_return()?;
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
@@ -870,14 +723,7 @@ fn add_assign_shaped(func: GenIn, trait_name: &Path, method_name: &Ident) -> Res
     let FunctionArgs {
         input: (lhs, rhs),
         output: (),
-        meta:
-            FunctionMeta {
-                derive_span,
-                generics,
-                to_call,
-                extra_attrs,
-                ..
-            },
+        meta: FunctionMeta { derive_span, generics, to_call, extra_attrs, .. },
     } = func.unwrap_mut_param(0)?.binary()?.default_return()?;
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
@@ -896,14 +742,7 @@ fn drop(func: GenIn) -> Result<TokenStream> {
     let FunctionArgs {
         input,
         output: (),
-        meta:
-            FunctionMeta {
-                derive_span,
-                generics,
-                to_call,
-                extra_attrs,
-                ..
-            },
+        meta: FunctionMeta { derive_span, generics, to_call, extra_attrs, .. },
     } = func.unwrap_mut_param(0)?.unary()?.default_return()?;
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
@@ -953,14 +792,7 @@ fn index(func: GenIn) -> Result<TokenStream> {
     let FunctionArgs {
         input: (coll, idx),
         output,
-        meta:
-            FunctionMeta {
-                derive_span,
-                generics,
-                to_call,
-                extra_attrs,
-                ..
-            },
+        meta: FunctionMeta { derive_span, generics, to_call, extra_attrs, .. },
     } = func.unwrap_ref_param(0)?.binary()?.unwrap_ref_return()?;
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
@@ -979,14 +811,7 @@ fn index(func: GenIn) -> Result<TokenStream> {
 fn index_mut(func: GenIn) -> Result<TokenStream> {
     let FunctionArgs {
         input: (coll, idx),
-        meta:
-            FunctionMeta {
-                derive_span,
-                generics,
-                to_call,
-                extra_attrs,
-                ..
-            },
+        meta: FunctionMeta { derive_span, generics, to_call, extra_attrs, .. },
         ..
     } = func.unwrap_mut_param(0)?.binary()?.unwrap_mut_return()?;
     let where_clause = &generics.where_clause;
@@ -1006,14 +831,7 @@ fn neg_shaped(func: GenIn, trait_name: &Path, method_name: &Ident) -> Result<Tok
     let FunctionArgs {
         input,
         output,
-        meta:
-            FunctionMeta {
-                derive_span,
-                generics,
-                to_call,
-                extra_attrs,
-                ..
-            },
+        meta: FunctionMeta { derive_span, generics, to_call, extra_attrs, .. },
     } = func.unary()?.has_return()?;
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
@@ -1033,14 +851,7 @@ fn deref(func: GenIn) -> Result<TokenStream> {
     let FunctionArgs {
         input,
         output,
-        meta:
-            FunctionMeta {
-                derive_span,
-                generics,
-                to_call,
-                extra_attrs,
-                ..
-            },
+        meta: FunctionMeta { derive_span, generics, to_call, extra_attrs, .. },
     } = func.unwrap_ref_param(0)?.unary()?.unwrap_ref_return()?;
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
@@ -1060,14 +871,7 @@ fn deref_mut(func: GenIn) -> Result<TokenStream> {
     let FunctionArgs {
         input,
         output,
-        meta:
-            FunctionMeta {
-                derive_span,
-                generics,
-                to_call,
-                extra_attrs,
-                ..
-            },
+        meta: FunctionMeta { derive_span, generics, to_call, extra_attrs, .. },
     } = func.unwrap_mut_param(0)?.unary()?.unwrap_mut_return()?;
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
@@ -1087,14 +891,7 @@ fn from_str(func: GenIn) -> Result<TokenStream> {
     let FunctionArgs {
         input,
         output: (output, err),
-        meta:
-            FunctionMeta {
-                derive_span,
-                generics,
-                to_call,
-                extra_attrs,
-                ..
-            },
+        meta: FunctionMeta { derive_span, generics, to_call, extra_attrs, .. },
     } = func.check_ref_param(0)?.unary()?.unwrap_result_return()?;
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {
@@ -1115,14 +912,7 @@ fn to_string(func: GenIn) -> Result<TokenStream> {
     let FunctionArgs {
         input,
         output,
-        meta:
-            FunctionMeta {
-                derive_span,
-                generics,
-                to_call,
-                extra_attrs,
-                ..
-            },
+        meta: FunctionMeta { derive_span, generics, to_call, extra_attrs, .. },
     } = func.unwrap_ref_param(0)?.unary()?.has_return()?;
     let where_clause = &generics.where_clause;
     Ok(quote_spanned! {

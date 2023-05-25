@@ -22,15 +22,23 @@
     clippy::blanket_clippy_restriction_lints,
     //// turn off individual noisy/buggy lints enabled by broader categories above:
     box_pointers,                          // obsolete/don't care
+    clippy::arithmetic_side_effects,       // what's a computer for?
     clippy::implicit_return,               // not idiomatic Rust
-    clippy::integer_arithmetic,            // what's a computer for?
     clippy::missing_const_for_fn,          // not relevant
     clippy::missing_docs_in_private_items, // don't care
-    clippy::redundant_pub_crate,           // a bit broken
-    clippy::shadow_reuse,
-    clippy::shadow_same,
-    clippy::shadow_unrelated,
+    clippy::missing_trait_methods,         // too noisy, especially with syn's fold
+    clippy::needless_borrowed_reference,   // can't decide if this is good or bad
+    clippy::question_mark_used,            // not idiomatic Rust
+    clippy::redundant_pub_crate,           // a bit broken/unhelpful
+    clippy::ref_patterns,                  // can't decide if this is good or bad
+    clippy::shadow_reuse,                  // hmm...     
+    clippy::shadow_same,                   // hmm...
+    clippy::shadow_unrelated,              // hmm...
+    clippy::single_char_lifetime_names,    // annoying
+    clippy::std_instead_of_alloc,          // don't care
+    clippy::std_instead_of_core,           // `proc_macro_error` again; also don't care
     clippy::str_to_string,                 // triggered by `proc_macro_error` macros
+    clippy::uninlined_format_args,         // reasonable, but LSP has issues
     clippy::wildcard_enum_match_arm,       // don't care
     clippy::wildcard_imports,              // don't care
     elided_lifetimes_in_paths,             // adding <'_> everywhere is ugly

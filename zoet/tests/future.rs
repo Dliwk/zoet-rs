@@ -1,5 +1,5 @@
 use core::{
-    future::{ready, IntoFuture, Ready},
+    future::{ready, Ready},
     pin::Pin,
     task::{Context, Poll},
 };
