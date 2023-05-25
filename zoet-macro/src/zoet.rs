@@ -20,6 +20,22 @@ fn trait_impl_from_fn(
     self_type: Option<&Type>,
     generics: &Generics,
 ) {
+    match *signature {
+        Signature { asyncness: Some(ref tok), .. } => abort!(
+            attr, "cannot apply to an async function";
+            help = tok.span() => "async function defined here"
+        ),
+        Signature { unsafety: Some(ref tok), .. } => abort!(
+            attr, "cannot apply to an unsafe function";
+            help = tok.span() => "unsafe function defined here"
+        ),
+        Signature { variadic: Some(ref tok), .. } => abort!(
+            tok, "cannot apply to a variadic function";
+            help = attr.span() => "variadic function defined here"
+        ),
+        _ => {}
+    };
+
     let ident = &signature.ident;
     let to_call = &self_type.map_or_else(
         || quote! { #ident },
@@ -58,17 +74,24 @@ fn trait_impl_from_fn(
                 );
 
                 let extra_attrs = quote! {
-                    //// `clippy::use_self` gives an unhelpful "unnecessary structure name repetition" hint.
-                    #[allow(clippy::use_self)]
-                    #[allow(unused_qualifications)]
+                    #[allow(
+                        // We don't/can't generate all optional methods for e.g. Iterator
+                        clippy::missing_trait_methods,
+                        // Disable unhelpful "unnecessary structure name repetition" lint.
+                        clippy::use_self,
+                        // Disable unhelpful "unnecessary qualification" lint; paths *should* be
+                        // fully-qualified in macros.
+                        unused_qualifications,
+                    )]
                     #[automatically_derived]
                     #( #copied_attrs )*
                     #[doc = #doc]
                 };
 
                 let meta = FunctionMeta {
-                    derive_span,
                     signature,
+                    derive_span,
+                    trait_ident: &trait_ident,
                     to_call,
                     generics,
                     extra_attrs: &extra_attrs,
@@ -149,12 +172,24 @@ fn add_assign_generics(lhs: &mut Generics, rhs: Generics) {
 fn filter_attrs(attrs: &mut Vec<Attribute>) -> (Vec<Attribute>, Vec<Attribute>) {
     let mut copied_attrs = Vec::new();
     // drain_filter would be nice, but it's not stable yet.
-    let (zoet_attrs, fn_attrs) = attrs.drain(..).partition(|attr| {
-        if attr.path.is_ident("cfg") || attr.path.is_ident("doc_cfg") {
+    let (zoet_attrs, mut fn_attrs) = attrs.drain(..).partition::<Vec<_>, _>(|attr| {
+        if attr.path.is_ident("cfg") {
             copied_attrs.push(attr.clone());
         }
         attr.path.is_ident("zoet")
     });
+
+    let extra_attributes = Attribute::parse_outer
+        .parse2(quote! {
+            #[allow(
+                //// It's probably not needless since we copy lifetimes into the generated trait impl
+                clippy::needless_lifetimes,
+                //// It's natural to give the wrapped inherent fn the same name as the trait impl fn
+                clippy::same_name_method,
+            )]
+        })
+        .unwrap_or_abort();
+    fn_attrs.extend(extra_attributes.into_iter());
     *attrs = fn_attrs;
     (zoet_attrs, copied_attrs)
 }
@@ -199,8 +234,8 @@ fn zoet_inherent_impl(attr: &TokenStream, mut item_impl: ItemImpl) -> TokenStrea
     tokens
 }
 
-fn parse_nested_meta(nested_meta: NestedMeta) -> Result<(Ident, GenFn)> {
-    match nested_meta {
+fn parse_nested_meta(nested_meta: &NestedMeta) -> Result<(Ident, GenFn)> {
+    match *nested_meta {
         NestedMeta::Lit(ref lit) => Err(diagnostic_error!(lit, "literals are not valid here")),
         NestedMeta::Meta(ref meta) => match *meta {
             Meta::List(ref value) => Err(diagnostic_error!(value, "this does not take parameters")),
@@ -222,7 +257,7 @@ fn trait_fns(
 ) -> impl Iterator<Item = (Span, Result<(Ident, GenFn)>)> {
     nested_metas
         .into_iter()
-        .map(|nested_meta| (nested_meta.span(), parse_nested_meta(nested_meta)))
+        .map(|nested_meta| (nested_meta.span(), parse_nested_meta(&nested_meta)))
 }
 
 pub(crate) fn zoet(attr: &TokenStream, item: &TokenStream) -> TokenStream {
@@ -242,16 +277,10 @@ pub(crate) fn zoet(attr: &TokenStream, item: &TokenStream) -> TokenStream {
         parse2(item.clone()).unwrap_or_else(|error| abort!(item, "this is not an item: {}", error));
 
     match item {
-        Item::Fn(item_fn) => match item_fn {
-            ItemFn {
-                sig: Signature { variadic: None, .. },
-                ..
-            } => zoet_free_fn(attr, item_fn),
-            _ => abort!(item_fn, "cannot apply to variadic functions"),
-        },
+        Item::Fn(item_fn) => zoet_free_fn(attr, item_fn),
         Item::Impl(item_impl) => match item_impl {
             ItemImpl { trait_: None, .. } => zoet_inherent_impl(attr, item_impl),
-            _ => abort!(item_impl, "can only apply to trait impls"),
+            _ => abort!(item_impl, "can only apply to inherent impls"),
         },
         item => abort!(item, "can only apply to functions or inherent impls"),
     }

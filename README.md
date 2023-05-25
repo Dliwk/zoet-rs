@@ -77,9 +77,9 @@ provided. The current list is as follows:
 * `core::default`: `Default`.
 * `core::fmt`: `Binary`, `Debug`, `Display`, `LowerExp`, `LowerHex`, `Octal`, `Pointer`, `UpperExp`
   `UpperHex`, and `Write` (implements `write_str`).
-* `core::future`: `Future`.
+* `core::future`: `Future` and `IntoFuture`.
 * `core::hash`: `Hash` (implements `hash`).
-* `core::iterator`: `IntoIterator` and `Iterator` (implements `next`).
+* `core::iter`: `IntoIterator` and `Iterator` (implements `next`).
 * `core::ops`: `Deref`, `DerefMut`, `Drop`, `Index`, `IndexMut`, plus all arithmetic and bitwise
   operations, and assignment variants such as `Add` and `AddAssign`.
 * `core::str`: `FromStr`.
@@ -107,8 +107,8 @@ Since this macro turns single functions into traits, there needs to be a 1:1 map
 function and a trait. This means that traits which require more than one function (e.g. `Hasher`)
 cannot be sanely supported. Likewise, marker traits like `FusedIterator` are not supported even
 though doing so would be trivial to implement, because that's really a job for a derive macro.
-Finally, traits which themselves have generic functions like `FromIterator` are not supported
-because they are beyond the abilities of `zoet`'s current signature parser.
+Finally, traits which themselves have generic functions like `FromIterator` or `Extend` are not
+supported because they are beyond the abilities of `zoet`'s current signature parser.
 
 Additionally, traits which are nightly-only like `Generator` are being avoided since there's no
 guarantee that `zoet` will be able to keep track of any future updates.

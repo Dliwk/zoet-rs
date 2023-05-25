@@ -133,12 +133,13 @@ impl IntLength {
 
 fn main() {
     let length: Length = 3.into();
+    let length2 = length;
 
     assert_eq!(length, Length(3.0));
 
     assert_eq!(length + length, Length(6.0));
     assert_eq!(length + length, Length(0.0));
-    assert_eq!(length / length, 1.0);
+    assert_eq!(length / length2, 1.0);
     assert_eq!(length * 4.0, Length(12.0));
     assert_eq!(length / 4.0, Length(0.75));
     assert_eq!(-length, Length(-3.0));

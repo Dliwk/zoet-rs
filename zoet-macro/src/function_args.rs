@@ -23,11 +23,14 @@ use syn::{
 #[derive(Clone, Copy)]
 pub(crate) struct FunctionMeta<'a> {
     // the original function signature, used in errors for when the entire shape of the function is
-    // wrong so a more precise location can't be given
+    // wrong so a more precise location can't be given.
     pub(crate) signature: &'a Signature,
 
-    // the attribute fragment (e.g. "Default") which caused this trait to be generated
+    // the attribute fragment (e.g. "Default") which caused this trait to be generated; used for
+    // error messages.
     pub(crate) derive_span: Span,
+    // the name of the trait we're generating (e.g. "Default"); used for error messages.
+    pub(crate) trait_ident: &'a Ident,
 
     // And these are bits pasted into the output traits
 
@@ -42,7 +45,7 @@ pub(crate) struct FunctionMeta<'a> {
 impl FunctionMeta<'_> {
     fn diagnostic_error(&self, spanned: &impl Spanned, message: &impl ToString) -> Diagnostic {
         diagnostic_error!(
-            self.derive_span, "function `{}` cannot be adapted to this trait", self.signature.ident,
+            self.derive_span, "function `{}(...)` is wrong shape for `#[zoet({})]`", self.signature.ident, self.trait_ident
                 ; note = spanned.span() => message,
         )
     }
@@ -53,9 +56,7 @@ impl FunctionMeta<'_> {
 
     fn check_ref<'a>(&self, ty: &'a WithTokens<'a, Type>, name: &str) -> Result<()> {
         match ty.value {
-            Type::Reference(TypeReference {
-                mutability: None, ..
-            }) => Ok(()),
+            Type::Reference(TypeReference { mutability: None, .. }) => Ok(()),
             _ => self.result(ty, &format!("{} must be an immutable reference", name)),
         }
     }
@@ -64,10 +65,7 @@ impl FunctionMeta<'_> {
     fn unwrap_ref<'a>(&self, ty: &'a WithTokens<'a, Type>, name: &str) -> Result<Type> {
         match ty.value {
             Type::Reference(TypeReference {
-                lifetime: None,
-                mutability: None,
-                ref elem,
-                ..
+                lifetime: None, mutability: None, ref elem, ..
             }) => Ok(elem.as_ref().clone()),
             _ => self.result(
                 ty,
@@ -80,7 +78,7 @@ impl FunctionMeta<'_> {
     }
 
     // TODO: handle lifetime arguments
-    fn unwrap_mut<'a>(&self, ty: &'a WithTokens<'a, Type>, name: &str) -> Result<Type> {
+    fn unwrap_mut<'a>(&self, ty: &'a WithTokens<'a, Type>, arg_name: &str) -> Result<Type> {
         match ty.value {
             Type::Reference(TypeReference {
                 lifetime: None,
@@ -92,7 +90,7 @@ impl FunctionMeta<'_> {
                 ty,
                 &format!(
                     "{} must be a mutable reference and not have a lifetime argument",
-                    name
+                    arg_name
                 ),
             ),
         }
@@ -102,19 +100,13 @@ impl FunctionMeta<'_> {
     fn unwrap_param_type<'a>(
         &self, ty: &'a WithTokens<'a, Type>,
     ) -> Result<Option<(&'a Ident, Box<[Type]>)>> {
-        if let Type::Path(TypePath {
-            qself: None,
-            ref path,
-        }) = ty.value
-        {
+        if let Type::Path(TypePath { qself: None, ref path }) = ty.value {
             let last = path
                 .segments
                 .last()
                 .expect_or_abort("TypePath::path is always nonempty");
-            if let PathSegment {
-                ref ident,
-                arguments: PathArguments::AngleBracketed(ref abga),
-            } = *last
+            if let PathSegment { ref ident, arguments: PathArguments::AngleBracketed(ref abga) } =
+                *last
             {
                 let args = abga
                     .args
@@ -130,7 +122,9 @@ impl FunctionMeta<'_> {
         Ok(None)
     }
 
-    fn unwrap_result<'a>(&self, ty: &'a WithTokens<'a, Type>, name: &str) -> Result<(Type, Type)> {
+    fn unwrap_result<'a>(
+        &self, ty: &'a WithTokens<'a, Type>, arg_name: &str,
+    ) -> Result<(Type, Type)> {
         if let Some((ident, boxed)) = self.unwrap_param_type(ty)? {
             match (ident.to_string().as_str(), &*boxed) {
                 ("Result", &[ref a, ref b]) => return Ok((a.clone(), b.clone())),
@@ -142,12 +136,14 @@ impl FunctionMeta<'_> {
             ty,
             &format!(
                 "{} must be `Result<_>`, `Result<_,_>` or `Fallible<_>`",
-                name
+                arg_name
             ),
         )
     }
 
-    fn unwrap<'a>(&self, ty: &'a WithTokens<'a, Type>, wrapper: &str, name: &str) -> Result<Type> {
+    fn unwrap<'a>(
+        &self, ty: &'a WithTokens<'a, Type>, wrapper: &str, arg_name: &str,
+    ) -> Result<Type> {
         if let Some((ident, boxed)) = self.unwrap_param_type(ty)? {
             if let (w, &[ref a]) = (ident.to_string().as_str(), &*boxed) {
                 if w == wrapper {
@@ -155,7 +151,7 @@ impl FunctionMeta<'_> {
                 }
             }
         }
-        self.result(ty, &format!("{} must be `{}<_>`", name, wrapper))
+        self.result(ty, &format!("{} must be `{}<_>`", arg_name, wrapper))
     }
 }
 
@@ -168,19 +164,11 @@ pub(crate) struct FunctionArgs<'a, I, O> {
 
 impl<'a, I, O> FunctionArgs<'a, I, O> {
     fn with_input<I2>(self, input: I2) -> FunctionArgs<'a, I2, O> {
-        FunctionArgs {
-            input,
-            output: self.output,
-            meta: self.meta,
-        }
+        FunctionArgs { input, output: self.output, meta: self.meta }
     }
 
     fn with_output<O2>(self, output: O2) -> FunctionArgs<'a, I, O2> {
-        FunctionArgs {
-            input: self.input,
-            output,
-            meta: self.meta,
-        }
+        FunctionArgs { input: self.input, output, meta: self.meta }
     }
 }
 
@@ -269,42 +257,26 @@ impl<'a, O> FunctionArgs<'a, Box<[WithTokens<'a, Type>]>, O> {
     }
 
     pub(crate) fn unary(self) -> Result<FunctionArgs<'a, Type, O>> {
-        let Self {
-            input,
-            output,
-            meta,
-        } = self;
+        let Self { input, output, meta } = self;
 
         <Box<[_; 1]>>::try_from(input)
             .map_err(|_box| {
                 meta.diagnostic_error(meta.signature, &"function should take one parameter")
             })
             .map(|boxed| match *boxed {
-                [a] => FunctionArgs {
-                    input: a.value,
-                    output,
-                    meta,
-                },
+                [a] => FunctionArgs { input: a.value, output, meta },
             })
     }
 
     pub(crate) fn binary(self) -> Result<FunctionArgs<'a, (Type, Type), O>> {
-        let Self {
-            input,
-            output,
-            meta,
-        } = self;
+        let Self { input, output, meta } = self;
 
         <Box<[_; 2]>>::try_from(input)
             .map_err(|_box| {
                 meta.diagnostic_error(meta.signature, &"function should take two parameters")
             })
             .map(|boxed| match *boxed {
-                [a, b] => FunctionArgs {
-                    input: (a.value, b.value),
-                    output,
-                    meta,
-                },
+                [a, b] => FunctionArgs { input: (a.value, b.value), output, meta },
             })
     }
 }

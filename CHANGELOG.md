@@ -1,5 +1,35 @@
 # CHANGELOG
 
+## 2023-05-25: Release 0.1.11
+
+* There is extra checking on function signatures to give a useful diagnostic for `async` and `unsafe` fns.
+
+* The generated traits now also add `#[allow(clippy::missing_trait_methods)]` since they can only
+  ever implement the primary trait function and there's nothing the user of this macro can do to fix
+  this short of manually implementing the trait.
+
+* The wrapped function now also adds `#[allow(clippy::same_name_method)]` to suppress that
+  diagnostic. It is reasonable to name the function after the trait method, e.g. `#[zoet(Iterator)]
+  fn next(...)`
+
+## 2022-10-29: Release 0.1.10
+
+* `#[doc_cfg]` attributes are no longer copied from the function to the derived impls as this was a
+  rust-unstable feature which has now been removed.
+
+* Error messages improved to say _which_ trait cannot be derived: this is useful for cases where
+  multiple traits are implemented on one function.
+
+* Added `IntoFuture` trait since it is now stable.
+
+* The generated trait functions now has `#[inline]` added since they are trivial proxy functions.
+
+* The generated traits now has `#[allow(clippy::use_self, unused_qualifications)]` added to
+  suppress pointless diagnostics.
+
+* The wrapped function (i.e. the one you wrote) now has `#[allow(clippy::needless_lifetimes)]` added
+  because "needless lifetimes" are often needed when the function is transformed into a trait.
+
 ## 2022-03-12: Release 0.1.9
 
 * The generated trait impls now have a rustdoc header indicating which function they were generated

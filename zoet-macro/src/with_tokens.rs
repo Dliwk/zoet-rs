@@ -43,10 +43,7 @@ impl<'a, T> WithTokens<'a, T> {
 
     #[must_use = "This returns a new object with updated values. Were you expecting a mutator?"]
     pub(crate) fn with_value<U>(&self, value: U) -> WithTokens<'a, U> {
-        WithTokens {
-            value,
-            to_tokens: self.to_tokens,
-        }
+        WithTokens { value, to_tokens: self.to_tokens }
     }
 
     // #[must_use = "This returns a new object with updated values. Were you expecting a mutator?"]
