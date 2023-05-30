@@ -2,7 +2,7 @@
 
 If you are sick of writing `impl Deref for Bar` etc., and it didn't compile because you confused it
 with `AsRef`, had a hard-to-debug problem because you implemented `PartialOrd` and mistakenly
-thought that deriving `Ord` would do the sane thing, and/or you would rather just implement these
+thought that deriving `Ord` would do the same thing, and/or you would rather just implement these
 core traits as regular functions in your `impl Bar` like lesser languages, this crate is for you!
 
 `zoet` is superficially similar to the various derive macros such as [`derive_more`], except that
